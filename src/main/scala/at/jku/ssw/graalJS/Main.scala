@@ -18,8 +18,95 @@
 
 package at.jku.ssw.graalJS
 
+import java.io.{Reader, FileReader}
+import org.mozilla.javascript._
+import ast._
+import tools.ToolErrorReporter
+
 object Main {
+
+  val variables = new scala.collection.mutable.HashMap[String, AnyRef]
+
+  class Interpreter extends NodeVisitor {
+    type JSDouble = java.lang.Double
+    type JSBoolean = java.lang.Boolean
+
+    def interpretExpression(expression: AstNode): AnyRef = expression match {
+      case name: Name => variables.getOrElse(name.getIdentifier, sys.error("variable " + name.getIdentifier + " not found line:" + name.getLineno))
+      case numberLiteral: NumberLiteral => new JSDouble(numberLiteral.getNumber)
+      case stringLiteral: StringLiteral => stringLiteral.getValue
+      case functionCall: FunctionCall =>
+        require(functionCall.getTarget.asInstanceOf[Name].getIdentifier == "println")
+        require(functionCall.getArguments.size == 1)
+        println(interpretExpression(functionCall.getArguments.get(0)))
+        null
+      case infixExpression: InfixExpression =>
+        if (infixExpression.getOperator == Token.OR || infixExpression.getOperator == Token.AND) {
+          if (infixExpression.getOperator == Token.OR) new JSBoolean(interpretExpression(infixExpression.getLeft).asInstanceOf[JSBoolean].booleanValue || interpretExpression(infixExpression.getRight).asInstanceOf[JSBoolean].booleanValue)
+          else new JSBoolean(interpretExpression(infixExpression.getLeft).asInstanceOf[JSBoolean].booleanValue && interpretExpression(infixExpression.getRight).asInstanceOf[JSBoolean].booleanValue)
+        }
+        else if (infixExpression.getOperator == Token.ASSIGN) {
+          val identifier = infixExpression.getLeft.asInstanceOf[Name].getIdentifier
+          if (!variables.contains(identifier)) sys.error("variable " + identifier + " not found line:" + infixExpression.getLeft.getLineno)
+          variables(identifier) = interpretExpression(infixExpression.getRight)
+          null
+        }
+        else {
+          val left = interpretExpression(infixExpression.getLeft)
+          val right = interpretExpression(infixExpression.getRight)
+          infixExpression.getOperator match {
+            case Token.ADD =>
+              if (left.isInstanceOf[JSDouble]) new JSDouble(left.asInstanceOf[JSDouble].doubleValue + right.asInstanceOf[JSDouble].doubleValue)
+              else left.asInstanceOf[String] + right.asInstanceOf[String]
+            case Token.SUB => new JSDouble(left.asInstanceOf[JSDouble].doubleValue - right.asInstanceOf[JSDouble].doubleValue)
+            case Token.MUL => new JSDouble(left.asInstanceOf[JSDouble].doubleValue * right.asInstanceOf[JSDouble].doubleValue)
+            case Token.DIV => new JSDouble(left.asInstanceOf[JSDouble].doubleValue / right.asInstanceOf[JSDouble].doubleValue)
+            case Token.EQ => new JSBoolean(left.asInstanceOf[JSDouble].doubleValue == right.asInstanceOf[JSDouble].doubleValue)
+            case Token.NE => new JSBoolean(left.asInstanceOf[JSDouble].doubleValue != right.asInstanceOf[JSDouble].doubleValue)
+            case Token.LT => new JSBoolean(left.asInstanceOf[JSDouble].doubleValue < right.asInstanceOf[JSDouble].doubleValue)
+            case Token.LE => new JSBoolean(left.asInstanceOf[JSDouble].doubleValue <= right.asInstanceOf[JSDouble].doubleValue)
+            case Token.GT => new JSBoolean(left.asInstanceOf[JSDouble].doubleValue > right.asInstanceOf[JSDouble].doubleValue)
+            case Token.GE => new JSBoolean(left.asInstanceOf[JSDouble].doubleValue >= right.asInstanceOf[JSDouble].doubleValue)
+            case operator => sys.error("unknown operator " + Token.typeToName(operator))
+          }
+        }
+      case _ => sys.error("unknown node " + expression.getClass)
+    }
+
+    def visit(node: AstNode) =
+      node match {
+        case _: AstRoot => true
+        case variableDeclaration: VariableDeclaration => true
+        case variableInitializer: VariableInitializer =>
+          val target = variableInitializer.getTarget.asInstanceOf[Name].getIdentifier
+          val value =
+            if (variableInitializer.getInitializer == null) new JSDouble(0.0)
+            else interpretExpression(variableInitializer.getInitializer)
+          variables(target) = value
+          false
+        case whileLoop: WhileLoop =>
+          while (interpretExpression(whileLoop.getCondition).asInstanceOf[JSBoolean]) whileLoop.getBody.visit(this)
+          false
+        case expressionStatement: ExpressionStatement =>
+          interpretExpression(expressionStatement.getExpression)
+          false
+        case scope: Scope => true
+        case _ => sys.error("unknown node " + node.getClass)
+      }
+
+  }
+
+  def parse(source: Either[String, Reader], sourceName: String = "unnamed script", lineno: Int = 1, compilationErrorReporter: ErrorReporter = new ToolErrorReporter(true)): AstRoot = {
+    val p = new Parser(new CompilerEnvirons, compilationErrorReporter)
+    source match {
+      case Left(sourceString) => p.parse(sourceString, sourceName, lineno)
+      case Right(sourceReader) => p.parse(sourceReader, sourceName, lineno)
+    }
+
+  }
+
   def main(arguments: Array[String]) {
+    parse(Right(new FileReader("test.js"))).visit(new Interpreter)
   }
 
 }
