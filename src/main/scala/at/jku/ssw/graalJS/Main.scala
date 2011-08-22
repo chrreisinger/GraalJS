@@ -40,26 +40,26 @@ object Main {
 
   class PrePass extends NodeVisitor {
     var maxLocals = 0
-    var maxExpressionStackSize = 0
+    var maxOperandStackSize = 0
     private val linearASTBuffer = new collection.immutable.VectorBuilder[AstNode]
     lazy val linerAST = linearASTBuffer.result()
 
     private val variables = new scala.collection.mutable.HashMap[String, Int]
 
-    private def calcMaxExpressionStackSize(expression: AstNode) {
-      maxExpressionStackSize = math.max(maxExpressionStackSize, calcExpressionStackSize(expression))
+    private def calcMaxOperandStackSize(expression: AstNode) {
+      maxOperandStackSize = math.max(maxOperandStackSize, calcOperandStackSize(expression))
 
-      def calcExpressionStackSize(expression: AstNode): Int =
+      def calcOperandStackSize(expression: AstNode): Int =
         expression match {
           case name: Name =>
             name.setLineno(variables.getOrElse(name.getIdentifier, sys.error("variable " + name.getIdentifier + " not found line:" + name.getLineno)))
             1
           case _: NumberLiteral | _: StringLiteral => 1
-          case functionCall: FunctionCall => functionCall.getArguments.asScala.map(calcExpressionStackSize).max
-          case assignment: Assignment => math.max(calcExpressionStackSize(assignment.getLeft), calcExpressionStackSize(assignment.getRight))
+          case functionCall: FunctionCall => functionCall.getArguments.asScala.map(calcOperandStackSize).max
+          case assignment: Assignment => math.max(calcOperandStackSize(assignment.getLeft), calcOperandStackSize(assignment.getRight))
           case infixExpression: InfixExpression =>
-            val left = calcExpressionStackSize(infixExpression.getLeft)
-            val right = calcExpressionStackSize(infixExpression.getRight)
+            val left = calcOperandStackSize(infixExpression.getLeft)
+            val right = calcOperandStackSize(infixExpression.getRight)
             infixExpression.getLeft match {
               case _: Name | _: NumberLiteral | _: StringLiteral => left + right
               case _ => math.max(left, right)
@@ -75,8 +75,8 @@ object Main {
         case variableInitializer: VariableInitializer =>
           val target = variableInitializer.getTarget.asInstanceOf[Name].getIdentifier
           variables(target) = maxLocals
-          if (variableInitializer.getInitializer != null) calcMaxExpressionStackSize(variableInitializer.getInitializer)
-          calcMaxExpressionStackSize(variableInitializer.getTarget)
+          if (variableInitializer.getInitializer != null) calcMaxOperandStackSize(variableInitializer.getInitializer)
+          calcMaxOperandStackSize(variableInitializer.getTarget)
           maxLocals += 1
           linearASTBuffer += node
           false
@@ -84,11 +84,11 @@ object Main {
           linearASTBuffer += node
           true
         case expressionStatement: ExpressionStatement =>
-          calcMaxExpressionStackSize(expressionStatement.getExpression)
+          calcMaxOperandStackSize(expressionStatement.getExpression)
           linearASTBuffer += node
           false
         case infixExpression: InfixExpression =>
-          calcMaxExpressionStackSize(infixExpression)
+          calcMaxOperandStackSize(infixExpression)
           linearASTBuffer += node
           false
         case emptyExpression: EmptyExpression =>
@@ -99,15 +99,15 @@ object Main {
       }
   }
 
-  class Interpreter(localVariables: Array[AnyRef], expressionStack: Array[AnyRef]) extends NodeVisitor {
+  class Interpreter(localVariables: Array[AnyRef], operandStack: Array[AnyRef]) extends NodeVisitor {
     type JSDouble = java.lang.Double
     type JSBoolean = java.lang.Boolean
     type JSInteger = java.lang.Integer
 
-    private var stackElement = -1
+    private var top = -1
 
     println("localVariables size:" + localVariables.length)
-    println("expressionStack size:" + expressionStack.length)
+    println("operandStack size:" + operandStack.length)
 
     private object ExpressionType extends Enumeration {
       val Undefined = Value(0)
@@ -148,25 +148,25 @@ object Main {
         case _ => Mixed
       }).id
 
-    private def peek = expressionStack(stackElement)
+    private def peek = operandStack(top)
 
     private def clearStack() {
-      for (i <- 0 to stackElement) expressionStack(i) = null
-      stackElement = -1
+      for (i <- 0 to top) operandStack(i) = null
+      top = -1
     }
 
     private def push(value: AnyRef): AnyRef = {
-      stackElement += 1
-      expressionStack(stackElement) = value
-      require(stackElement <= expressionStack.length)
+      top += 1
+      operandStack(top) = value
+      require(top <= operandStack.length)
       value
     }
 
     private def pop(): AnyRef = {
-      val element = expressionStack(stackElement)
-      expressionStack(stackElement) = null
-      stackElement -= 1
-      require(stackElement >= -1)
+      val element = operandStack(top)
+      operandStack(top) = null
+      top -= 1
+      require(top >= -1)
       element
     }
 
@@ -336,7 +336,7 @@ object Main {
     val ast = parse(Right(new FileReader("test.js")), lineno = 1001)
     val prePass = new PrePass
     ast.visit(prePass)
-    ast.visit(new Interpreter(new Array[AnyRef](prePass.maxLocals), new Array[AnyRef](prePass.maxExpressionStackSize)))
+    ast.visit(new Interpreter(new Array[AnyRef](prePass.maxLocals), new Array[AnyRef](prePass.maxOperandStackSize)))
   }
 }
 
