@@ -25,6 +25,12 @@ import tools.ToolErrorReporter
 import scala.collection.JavaConverters._
 
 /*
+expression berechnungen bei Integers mit double mochen  ADD, SUB, MUL,DIV (done)
+expression berechnungen mixed mit JSInteger und JSDouble (done)
+bei linearen ast JUMP mit array index bei while
+CONDITIONAL JUMP bei if statement statt pop
+
+
 type in expression speichern undefined, allways A | B, mixed (done)
 variablen mit index zugreifen (done)
 expression auf int spezialisieren, z.B vergleiche (done)
@@ -141,6 +147,8 @@ object Main {
           case _: String => AllwaysString
           case UndefinedValue => Undefined
         }
+        case (AllwaysInt, _: JSDouble) => AllwaysDouble
+        case (AllwaysDouble, _: JSInteger) => AllwaysDouble
         case (AllwaysInt, _: JSInteger) => AllwaysInt
         case (AllwaysBoolean, _: JSBoolean) => AllwaysBoolean
         case (AllwaysDouble, _: JSDouble) => AllwaysDouble
@@ -227,30 +235,30 @@ object Main {
               case (leftString: String, rightString: String) =>
                 require(operator == Token.ADD)
                 leftString + rightString
-              case (leftDouble: JSDouble, rightDouble: JSDouble) => operator match {
-                case Token.ADD => new JSDouble(leftDouble.doubleValue + rightDouble.doubleValue)
-                case Token.SUB => new JSDouble(leftDouble.doubleValue - rightDouble.doubleValue)
-                case Token.MUL => new JSDouble(leftDouble.doubleValue * rightDouble.doubleValue)
-                case Token.DIV => new JSDouble(leftDouble.doubleValue / rightDouble.doubleValue)
-                case Token.EQ => new JSBoolean(leftDouble.doubleValue == rightDouble.doubleValue)
-                case Token.NE => new JSBoolean(leftDouble.doubleValue != rightDouble.doubleValue)
-                case Token.LT => new JSBoolean(leftDouble.doubleValue < rightDouble.doubleValue)
-                case Token.LE => new JSBoolean(leftDouble.doubleValue <= rightDouble.doubleValue)
-                case Token.GT => new JSBoolean(leftDouble.doubleValue > rightDouble.doubleValue)
-                case Token.GE => new JSBoolean(leftDouble.doubleValue >= rightDouble.doubleValue)
-                case _ => sys.error("unknown operator " + Token.typeToName(operator))
-              }
               case (leftInt: JSInteger, rightInt: JSInteger) => operator match {
-                case Token.ADD => new JSInteger(leftInt.intValue + rightInt.intValue)
-                case Token.SUB => new JSInteger(leftInt.intValue - rightInt.intValue)
-                case Token.MUL => new JSInteger(leftInt.intValue * rightInt.intValue)
-                case Token.DIV => new JSInteger(leftInt.intValue / rightInt.intValue)
+                case Token.ADD => toNumber(leftInt.doubleValue + rightInt.doubleValue)
+                case Token.SUB => toNumber(leftInt.doubleValue - rightInt.doubleValue)
+                case Token.MUL => toNumber(leftInt.doubleValue * rightInt.doubleValue)
+                case Token.DIV => toNumber(leftInt.doubleValue / rightInt.doubleValue)
                 case Token.EQ => new JSBoolean(leftInt.intValue == rightInt.intValue)
                 case Token.NE => new JSBoolean(leftInt.intValue != rightInt.intValue)
                 case Token.LT => new JSBoolean(leftInt.intValue < rightInt.intValue)
                 case Token.LE => new JSBoolean(leftInt.intValue <= rightInt.intValue)
                 case Token.GT => new JSBoolean(leftInt.intValue > rightInt.intValue)
                 case Token.GE => new JSBoolean(leftInt.intValue >= rightInt.intValue)
+                case _ => sys.error("unknown operator " + Token.typeToName(operator))
+              }
+              case (leftNumber: java.lang.Number, rightNumber: java.lang.Number) => operator match {
+                case Token.ADD => toNumber(leftNumber.doubleValue + rightNumber.doubleValue)
+                case Token.SUB => toNumber(leftNumber.doubleValue - rightNumber.doubleValue)
+                case Token.MUL => toNumber(leftNumber.doubleValue * rightNumber.doubleValue)
+                case Token.DIV => toNumber(leftNumber.doubleValue / rightNumber.doubleValue)
+                case Token.EQ => new JSBoolean(leftNumber.doubleValue == rightNumber.doubleValue)
+                case Token.NE => new JSBoolean(leftNumber.doubleValue != rightNumber.doubleValue)
+                case Token.LT => new JSBoolean(leftNumber.doubleValue < rightNumber.doubleValue)
+                case Token.LE => new JSBoolean(leftNumber.doubleValue <= rightNumber.doubleValue)
+                case Token.GT => new JSBoolean(leftNumber.doubleValue > rightNumber.doubleValue)
+                case Token.GE => new JSBoolean(leftNumber.doubleValue >= rightNumber.doubleValue)
                 case _ => sys.error("unknown operator " + Token.typeToName(operator))
               }
             }
