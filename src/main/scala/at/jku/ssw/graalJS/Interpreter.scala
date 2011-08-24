@@ -32,12 +32,15 @@ final class Interpreter(nodes: collection.mutable.ArrayBuffer[AstNode], localVar
     element
   }
 
-  private def toNumber(value: Double): java.lang.Number =
-    if (value.asInstanceOf[Int].asInstanceOf[Double] == value) new JSInteger(value.asInstanceOf[Int])
-    else new JSDouble(value)
-
   private def interpretExpression(expression: AstNode): AnyRef = {
+    def toNumber(value: Double): java.lang.Number =
+      if (value.asInstanceOf[Int].asInstanceOf[Double] == value) new JSInteger(value.asInstanceOf[Int])
+      else new JSDouble(value)
+
     val value = expression match {
+      case name: Name => push(localVariables(name.getLineno))
+      case numberLiteral: NumberLiteral => push(toNumber(numberLiteral.getNumber))
+      case stringLiteral: StringLiteral => push(stringLiteral.getValue)
       case functionCall: FunctionCall =>
         require(functionCall.getTarget.asInstanceOf[Name].getIdentifier == "println")
         require(functionCall.getArguments.size == 1)
@@ -54,7 +57,7 @@ final class Interpreter(nodes: collection.mutable.ArrayBuffer[AstNode], localVar
       case infixExpression: InfixExpression =>
         val operator = infixExpression.getOperator
         if (operator == Token.OR || operator == Token.AND) {
-          interpretExpression(infixExpression.getLeft)
+          /*interpretExpression(infixExpression.getLeft)
           val left = peek.asInstanceOf[JSBoolean].booleanValue
           if ((!left && operator == Token.OR) || (left && operator == Token.AND)) {
             pop()
@@ -64,6 +67,8 @@ final class Interpreter(nodes: collection.mutable.ArrayBuffer[AstNode], localVar
             else push(new JSBoolean(left && right))
           }
           peek
+          */
+          sys.error("not implemented")
         } else {
           val right = pop()
           val left = pop()
@@ -123,55 +128,15 @@ final class Interpreter(nodes: collection.mutable.ArrayBuffer[AstNode], localVar
     var next = index + 1
     nodes(index) match {
       case null => push(UndefinedValue)
-      case name: Name => push(localVariables(name.getLineno))
-      case numberLiteral: NumberLiteral => push(toNumber(numberLiteral.getNumber))
-      case stringLiteral: StringLiteral => push(stringLiteral.getValue)
       case variableInitializer: VariableInitializer =>
         val name = variableInitializer.getTarget.asInstanceOf[Name]
         require(name.getLineno < localVariables.length)
         localVariables(name.getLineno) = pop()
-      /*
-    case ifStatement: IfStatement =>
-      if (interpretExpression(ifStatement.getCondition).asInstanceOf[JSBoolean].booleanValue) {
-        pop()
-        ifStatement.getThenPart.visit(this)
-      }
-      else if (ifStatement.getElsePart != null) {
-        pop()
-        ifStatement.getElsePart.visit(this)
-      }
-      else pop()
-      false
-      case whileLoop: WhileLoop =>
-        while (interpretExpression(whileLoop.getCondition).asInstanceOf[JSBoolean].booleanValue) {
-          pop()
-          whileLoop.getBody.visit(this)
-        }
-        pop()
-        false
-    case doLoop: DoLoop =>
-      doLoop.getBody.visit(this)
-      while (interpretExpression(doLoop.getCondition).asInstanceOf[JSBoolean].booleanValue) {
-        pop()
-        doLoop.getBody.visit(this)
-      }
-      pop()
-      false
-    case forLoop: ForLoop =>
-      forLoop.getInitializer.visit(this)
-      while (interpretExpression(forLoop.getCondition).asInstanceOf[JSBoolean].booleanValue) {
-        pop()
-        forLoop.getBody.visit(this)
-        interpretExpression(forLoop.getIncrement)
-      }
-      pop()
-      false
-      */
       case GotoNode(offset) => next += offset
       case ConditionalJumpNode(offset, trueJump) =>
         val result = pop().asInstanceOf[JSBoolean].booleanValue
         if ((trueJump && result) || (!trueJump && !result)) next += offset
-      case infixExpression: InfixExpression => interpretExpression(infixExpression)
+      case node@(_: InfixExpression | _: NumberLiteral | _: Name | _: StringLiteral) => interpretExpression(node)
       case emptyExpression: EmptyExpression => clearStack()
       case expressionStatement: ExpressionStatement => clearStack()
       case returnStatement: ReturnStatement => println("return value:" + pop())
