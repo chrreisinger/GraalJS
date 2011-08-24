@@ -18,7 +18,9 @@ object Main {
     val ast = parse(Right(new FileReader("test.js")), lineno = 1001)
     val prePass = new PrePass
     ast.visit(prePass)
-    ast.visit(new Interpreter(new Array[AnyRef](prePass.maxLocals), new Array[AnyRef](prePass.maxOperandStackSize)))
-    new GraphBuilder(prePass.linerAST)
+    val interpreter = new Interpreter(prePass.linerAST, new Array[AnyRef](prePass.maxLocals), new Array[AnyRef](prePass.maxOperandStackSize))
+    interpreter.interpret()
+    //new GraphBuilder(prePass.linerAST, prePass.maxLocals, prePass.maxOperandStackSize)
+    println("programm ende")
   }
 }

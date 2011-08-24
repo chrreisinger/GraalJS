@@ -2,57 +2,13 @@ package at.jku.ssw.graalJS
 
 import org.mozilla.javascript.Token
 import org.mozilla.javascript.ast._
+import annotation.tailrec
 
-final class Interpreter(localVariables: Array[AnyRef], operandStack: Array[AnyRef]) extends NodeVisitor {
-  type JSDouble = java.lang.Double
-  type JSBoolean = java.lang.Boolean
-  type JSInteger = java.lang.Integer
-
+final class Interpreter(nodes: collection.mutable.ArrayBuffer[AstNode], localVariables: Array[AnyRef], operandStack: Array[AnyRef]) {
   private var top = -1
 
   println("localVariables size:" + localVariables.length)
   println("operandStack size:" + operandStack.length)
-
-  private object ExpressionType extends Enumeration {
-    val Undefined = Value(0)
-    val AllwaysInt = Value(-1)
-    val AllwaysBoolean = Value(-2)
-    val AllwaysDouble = Value(-3)
-    val AllwaysString = Value(-4)
-    val Mixed = Value(-5)
-  }
-
-  import ExpressionType._
-
-  private case object UndefinedValue
-
-  private def typeToExpressionType(_type: Int): ExpressionType.Value =
-    if (_type >= 0) Undefined
-    else _type match {
-      case -1 => AllwaysInt
-      case -2 => AllwaysBoolean
-      case -3 => AllwaysDouble
-      case -4 => AllwaysString
-      case -5 => Mixed
-    }
-
-  private def calcNewType(oldType: ExpressionType.Value, newValue: AnyRef): Int =
-    ((oldType, newValue) match {
-      case (Undefined, _) => newValue match {
-        case _: JSInteger => AllwaysInt
-        case _: JSBoolean => AllwaysBoolean
-        case _: JSDouble => AllwaysDouble
-        case _: String => AllwaysString
-        case UndefinedValue => Undefined
-      }
-      case (AllwaysInt, _: JSDouble) => AllwaysDouble
-      case (AllwaysDouble, _: JSInteger) => AllwaysDouble
-      case (AllwaysInt, _: JSInteger) => AllwaysInt
-      case (AllwaysBoolean, _: JSBoolean) => AllwaysBoolean
-      case (AllwaysDouble, _: JSDouble) => AllwaysDouble
-      case (AllwaysString, _: String) => AllwaysString
-      case _ => Mixed
-    }).id
 
   private def peek = operandStack(top)
 
@@ -76,15 +32,12 @@ final class Interpreter(localVariables: Array[AnyRef], operandStack: Array[AnyRe
     element
   }
 
-  private def interpretExpression(expression: AstNode): AnyRef = {
-    def toNumber(value: Double): java.lang.Number =
-      if (value.asInstanceOf[Int].asInstanceOf[Double] == value) new JSInteger(value.asInstanceOf[Int])
-      else new JSDouble(value)
+  private def toNumber(value: Double): java.lang.Number =
+    if (value.asInstanceOf[Int].asInstanceOf[Double] == value) new JSInteger(value.asInstanceOf[Int])
+    else new JSDouble(value)
 
+  private def interpretExpression(expression: AstNode): AnyRef = {
     val value = expression match {
-      case name: Name => push(localVariables(name.getLineno))
-      case numberLiteral: NumberLiteral => push(toNumber(numberLiteral.getNumber))
-      case stringLiteral: StringLiteral => push(stringLiteral.getValue)
       case functionCall: FunctionCall =>
         require(functionCall.getTarget.asInstanceOf[Name].getIdentifier == "println")
         require(functionCall.getArguments.size == 1)
@@ -96,7 +49,6 @@ final class Interpreter(localVariables: Array[AnyRef], operandStack: Array[AnyRe
         val name = assignment.getLeft.asInstanceOf[Name]
         require(assignment.getOperator == Token.ASSIGN)
         require(name.getLineno < localVariables.length)
-        interpretExpression(assignment.getRight)
         localVariables(name.getLineno) = pop()
         UndefinedValue
       case infixExpression: InfixExpression =>
@@ -113,8 +65,6 @@ final class Interpreter(localVariables: Array[AnyRef], operandStack: Array[AnyRe
           }
           peek
         } else {
-          interpretExpression(infixExpression.getLeft)
-          interpretExpression(infixExpression.getRight)
           val right = pop()
           val left = pop()
           val result = (left, right) match {
@@ -168,29 +118,30 @@ final class Interpreter(localVariables: Array[AnyRef], operandStack: Array[AnyRe
     value
   }
 
-  def visit(node: AstNode) =
-    node match {
-      case _: AstRoot => true
-      case variableDeclaration: VariableDeclaration => true
+  @tailrec
+  def interpret(index: Int = 0) {
+    var next = index + 1
+    nodes(index) match {
+      case null => push(UndefinedValue)
+      case name: Name => push(localVariables(name.getLineno))
+      case numberLiteral: NumberLiteral => push(toNumber(numberLiteral.getNumber))
+      case stringLiteral: StringLiteral => push(stringLiteral.getValue)
       case variableInitializer: VariableInitializer =>
         val name = variableInitializer.getTarget.asInstanceOf[Name]
         require(name.getLineno < localVariables.length)
-
-        if (variableInitializer.getInitializer == null) push(UndefinedValue)
-        else interpretExpression(variableInitializer.getInitializer)
         localVariables(name.getLineno) = pop()
-        false
-      case ifStatement: IfStatement =>
-        if (interpretExpression(ifStatement.getCondition).asInstanceOf[JSBoolean].booleanValue) {
-          pop()
-          ifStatement.getThenPart.visit(this)
-        }
-        else if (ifStatement.getElsePart != null) {
-          pop()
-          ifStatement.getElsePart.visit(this)
-        }
-        else pop()
-        false
+      /*
+    case ifStatement: IfStatement =>
+      if (interpretExpression(ifStatement.getCondition).asInstanceOf[JSBoolean].booleanValue) {
+        pop()
+        ifStatement.getThenPart.visit(this)
+      }
+      else if (ifStatement.getElsePart != null) {
+        pop()
+        ifStatement.getElsePart.visit(this)
+      }
+      else pop()
+      false
       case whileLoop: WhileLoop =>
         while (interpretExpression(whileLoop.getCondition).asInstanceOf[JSBoolean].booleanValue) {
           pop()
@@ -198,34 +149,35 @@ final class Interpreter(localVariables: Array[AnyRef], operandStack: Array[AnyRe
         }
         pop()
         false
-      case doLoop: DoLoop =>
+    case doLoop: DoLoop =>
+      doLoop.getBody.visit(this)
+      while (interpretExpression(doLoop.getCondition).asInstanceOf[JSBoolean].booleanValue) {
+        pop()
         doLoop.getBody.visit(this)
-        while (interpretExpression(doLoop.getCondition).asInstanceOf[JSBoolean].booleanValue) {
-          pop()
-          doLoop.getBody.visit(this)
-        }
+      }
+      pop()
+      false
+    case forLoop: ForLoop =>
+      forLoop.getInitializer.visit(this)
+      while (interpretExpression(forLoop.getCondition).asInstanceOf[JSBoolean].booleanValue) {
         pop()
-        false
-      case forLoop: ForLoop =>
-        forLoop.getInitializer.visit(this)
-        while (interpretExpression(forLoop.getCondition).asInstanceOf[JSBoolean].booleanValue) {
-          pop()
-          forLoop.getBody.visit(this)
-          interpretExpression(forLoop.getIncrement)
-        }
-        pop()
-        false
-      case infixExpression: InfixExpression =>
-        interpretExpression(infixExpression)
-        false
-      case emptyExpression: EmptyExpression =>
-        clearStack()
-        false
-      case expressionStatement: ExpressionStatement =>
-        interpretExpression(expressionStatement.getExpression)
-        clearStack()
-        false
+        forLoop.getBody.visit(this)
+        interpretExpression(forLoop.getIncrement)
+      }
+      pop()
+      false
+      */
+      case GotoNode(offset) => next += offset
+      case ConditionalJumpNode(offset, trueJump) =>
+        val result = pop().asInstanceOf[JSBoolean].booleanValue
+        if ((trueJump && result) || (!trueJump && !result)) next += offset
+      case infixExpression: InfixExpression => interpretExpression(infixExpression)
+      case emptyExpression: EmptyExpression => clearStack()
+      case expressionStatement: ExpressionStatement => clearStack()
       case scope: Scope => true
-      case _ => sys.error("unknown node " + node.getClass)
+      case node => sys.error("unknown node " + node.getClass)
     }
+    if (next < nodes.size) interpret(next)
+  }
+
 }
