@@ -21,6 +21,5 @@ object Main {
     val interpreter = new Interpreter(prePass.linerAST, new Array[AnyRef](prePass.maxLocals), new Array[AnyRef](prePass.maxOperandStackSize))
     interpreter.interpret()
     //new GraphBuilder(prePass.linerAST, prePass.maxLocals, prePass.maxOperandStackSize)
-    println("programm ende")
   }
 }

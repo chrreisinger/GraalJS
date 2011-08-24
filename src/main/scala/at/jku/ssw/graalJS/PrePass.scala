@@ -83,9 +83,11 @@ final class PrePass extends NodeVisitor {
         jump.offset = linearASTBuffer.size - size + 1
         linearASTBuffer += new GotoNode(start - linearASTBuffer.size - 1)
         false
-      case _: DoLoop | _: ForLoop | _: IfStatement =>
-        linearASTBuffer += node
-        true
+      case returnStatement: ReturnStatement =>
+        if (returnStatement.getReturnValue == null) linearASTBuffer += null
+        else returnStatement.getReturnValue.visit(this)
+        linearASTBuffer += returnStatement
+        false
       case expressionStatement: ExpressionStatement =>
         calcMaxOperandStackSize(expressionStatement.getExpression)
         expressionStatement.getExpression.visit(this)

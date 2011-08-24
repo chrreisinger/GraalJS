@@ -174,6 +174,7 @@ final class Interpreter(nodes: collection.mutable.ArrayBuffer[AstNode], localVar
       case infixExpression: InfixExpression => interpretExpression(infixExpression)
       case emptyExpression: EmptyExpression => clearStack()
       case expressionStatement: ExpressionStatement => clearStack()
+      case returnStatement: ReturnStatement => println("return value:" + pop())
       case scope: Scope => true
       case node => sys.error("unknown node " + node.getClass)
     }
