@@ -6,6 +6,8 @@ import ast._
 import tools.ToolErrorReporter
 
 object Main {
+  def mockMethod = 41
+
   def parse(source: Either[String, Reader], sourceName: String = "unnamed script", lineno: Int = 1, compilationErrorReporter: ErrorReporter = new ToolErrorReporter(true)): AstRoot = {
     val parser = new Parser(new CompilerEnvirons, compilationErrorReporter)
     source match {
@@ -20,6 +22,9 @@ object Main {
     ast.visit(prePass)
     val interpreter = new Interpreter(prePass.linerAST, new Array[AnyRef](prePass.maxLocals), new Array[AnyRef](prePass.maxOperandStackSize))
     interpreter.interpret()
-    //new GraphBuilder(prePass.linerAST, prePass.maxLocals, prePass.maxOperandStackSize)
+    val graphBuilder = new GraphBuilder(Class.forName("at.jku.ssw.graalJS.Main").getMethod("mockMethod"), prePass.maxLocals, prePass.maxOperandStackSize)
+    ast.visit(graphBuilder)
+    graphBuilder.visualize()
+    graphBuilder.run
   }
 }

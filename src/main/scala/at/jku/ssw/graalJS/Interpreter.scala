@@ -5,6 +5,11 @@ import org.mozilla.javascript.ast._
 import annotation.tailrec
 
 final class Interpreter(nodes: collection.mutable.ArrayBuffer[AstNode], localVariables: Array[AnyRef], operandStack: Array[AnyRef]) {
+
+  type JSDouble = java.lang.Double
+  type JSBoolean = java.lang.Boolean
+  type JSInteger = java.lang.Integer
+
   private var top = -1
 
   println("localVariables size:" + localVariables.length)
@@ -32,13 +37,33 @@ final class Interpreter(nodes: collection.mutable.ArrayBuffer[AstNode], localVar
     element
   }
 
+  import ExpressionType._
+
+  private def calcNewType(oldType: ExpressionType.Value, newValue: AnyRef) =
+    (oldType, newValue) match {
+      case (Undefined, _) => newValue match {
+        case _: JSInteger => AllwaysInt
+        case _: JSBoolean => AllwaysBoolean
+        case _: JSDouble => AllwaysDouble
+        case _: String => AllwaysString
+        case UndefinedValue => Undefined
+      }
+      case (AllwaysInt, _: JSDouble) => AllwaysDouble
+      case (AllwaysDouble, _: JSInteger) => AllwaysDouble
+      case (AllwaysInt, _: JSInteger) => AllwaysInt
+      case (AllwaysBoolean, _: JSBoolean) => AllwaysBoolean
+      case (AllwaysDouble, _: JSDouble) => AllwaysDouble
+      case (AllwaysString, _: String) => AllwaysString
+      case _ => Mixed
+    }
+
   private def interpretExpression(expression: AstNode): AnyRef = {
     def toNumber(value: Double): java.lang.Number =
       if (value.asInstanceOf[Int].asInstanceOf[Double] == value) new JSInteger(value.asInstanceOf[Int])
       else new JSDouble(value)
 
     val value = expression match {
-      case name: Name => push(localVariables(name.getLineno))
+      case name: Name => push(localVariables(name.varIndex))
       case numberLiteral: NumberLiteral => push(toNumber(numberLiteral.getNumber))
       case stringLiteral: StringLiteral => push(stringLiteral.getValue)
       case functionCall: FunctionCall =>
@@ -51,8 +76,8 @@ final class Interpreter(nodes: collection.mutable.ArrayBuffer[AstNode], localVar
       case assignment: Assignment =>
         val name = assignment.getLeft.asInstanceOf[Name]
         require(assignment.getOperator == Token.ASSIGN)
-        require(name.getLineno < localVariables.length)
-        localVariables(name.getLineno) = pop()
+        require(name.varIndex < localVariables.length)
+        localVariables(name.varIndex) = pop()
         UndefinedValue
       case infixExpression: InfixExpression =>
         val operator = infixExpression.getOperator
@@ -119,7 +144,8 @@ final class Interpreter(nodes: collection.mutable.ArrayBuffer[AstNode], localVar
         }
       case _ => sys.error("unknown node " + expression.getClass)
     }
-    expression.setLength(calcNewType(typeToExpressionType(expression.getLength), value))
+    //expression.dataType = calcNewType(expression.dataType, value)
+    expression.dataType = ExpressionType.AllwaysInt
     value
   }
 
@@ -130,8 +156,8 @@ final class Interpreter(nodes: collection.mutable.ArrayBuffer[AstNode], localVar
       case null => push(UndefinedValue)
       case variableInitializer: VariableInitializer =>
         val name = variableInitializer.getTarget.asInstanceOf[Name]
-        require(name.getLineno < localVariables.length)
-        localVariables(name.getLineno) = pop()
+        require(name.varIndex < localVariables.length)
+        localVariables(name.varIndex) = pop()
       case GotoNode(offset) => next += offset
       case ConditionalJumpNode(offset, trueJump) =>
         val result = pop().asInstanceOf[JSBoolean].booleanValue

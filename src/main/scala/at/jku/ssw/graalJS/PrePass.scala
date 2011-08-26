@@ -52,7 +52,7 @@ final class PrePass extends NodeVisitor {
   }
 
   def setVarIndex(name: Name) {
-    name.setLineno(variables.getOrElse(name.getIdentifier, sys.error("variable " + name.getIdentifier + " not found line:" + name.getLineno)))
+    name.varIndex = variables.getOrElse(name.getIdentifier, sys.error("variable " + name.getIdentifier + " not found line:" + name.getLineno))
   }
 
   def visit(node: AstNode) =

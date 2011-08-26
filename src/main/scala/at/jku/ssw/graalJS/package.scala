@@ -1,10 +1,8 @@
 package at.jku.ssw
 
-package object graalJS {
-  type JSDouble = java.lang.Double
-  type JSBoolean = java.lang.Boolean
-  type JSInteger = java.lang.Integer
+import org.mozilla.javascript.ast.AstNode
 
+package object graalJS {
   object ExpressionType extends Enumeration {
     val Undefined = Value(0)
     val AllwaysInt = Value(-1)
@@ -28,21 +26,17 @@ package object graalJS {
       case -5 => Mixed
     }
 
-  def calcNewType(oldType: ExpressionType.Value, newValue: AnyRef): Int =
-    ((oldType, newValue) match {
-      case (Undefined, _) => newValue match {
-        case _: JSInteger => AllwaysInt
-        case _: JSBoolean => AllwaysBoolean
-        case _: JSDouble => AllwaysDouble
-        case _: String => AllwaysString
-        case UndefinedValue => Undefined
-      }
-      case (AllwaysInt, _: JSDouble) => AllwaysDouble
-      case (AllwaysDouble, _: JSInteger) => AllwaysDouble
-      case (AllwaysInt, _: JSInteger) => AllwaysInt
-      case (AllwaysBoolean, _: JSBoolean) => AllwaysBoolean
-      case (AllwaysDouble, _: JSDouble) => AllwaysDouble
-      case (AllwaysString, _: String) => AllwaysString
-      case _ => Mixed
-    }).id
+  implicit def toRichNode(node: AstNode) = new {
+    def dataType = typeToExpressionType(node.getLength)
+
+    def dataType_=(_dataType: ExpressionType.Value) {
+      node.setLength(_dataType.id)
+    }
+
+    def varIndex_=(varIndex: Int) {
+      node.setLineno(varIndex)
+    }
+
+    def varIndex = node.getLineno
+  }
 }
