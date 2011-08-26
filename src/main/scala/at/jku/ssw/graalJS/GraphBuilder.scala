@@ -1,6 +1,7 @@
 package at.jku.ssw.graalJS
 
-import _root_.java.lang.reflect.Method
+import DataType._
+import java.lang.reflect.Method
 import org.mozilla.javascript.Token
 import org.mozilla.javascript.ast._
 import com.sun.cri.ci.{CiConstant, CiKind}
@@ -8,38 +9,43 @@ import com.sun.cri.bytecode.Bytecodes._
 import com.oracle.max.graal.compiler.value.FrameStateBuilder
 import com.oracle.max.graal.nodes._
 import com.oracle.max.graal.nodes.calc._
-import ExpressionType._
 import com.oracle.max.graal.compiler.debug.IdealGraphPrinterObserver
 import com.oracle.max.graal.runtime.{HotSpotMethodResolved, HotSpotTargetMethod, CompilerImpl}
-import com.sun.cri.ri.RiMethod
 import com.oracle.max.graal.compiler.GraalOptions
 
-final class GraphBuilder(m: Method, maxLocals: Int, maxStackSize: Int) extends NodeVisitor {
+final class GraphBuilder(method: Method, maxLocals: Int, maxStackSize: Int) extends NodeVisitor {
 
   // Obtain RiMethod and RiRuntime instances.
-  val compilerInstance = CompilerImpl.getInstance()
-  val vmEntries = compilerInstance.getVMEntries
-  val riMethod = vmEntries.getRiMethod(m)
-  val riRuntime = compilerInstance.getRuntime
+  private val compilerInstance = CompilerImpl.getInstance()
+  private val vmEntries = compilerInstance.getVMEntries
+  private val riMethod = vmEntries.getRiMethod(method)
+  private val riRuntime = compilerInstance.getRuntime
 
   // Create the compiler graph for the method.
-  val graph = new CompilerGraph(riRuntime)
-  val frameState = new FrameStateBuilder(riMethod, maxLocals, maxStackSize, graph)
+  private val graph = new CompilerGraph(riRuntime)
+  private val frameState = new FrameStateBuilder(riMethod, maxLocals, maxStackSize, graph)
 
   def run() {
     // Compile and print disassembly.
-    val result = compilerInstance.getCompiler.compileMethod(riMethod, graph);
-    //println(riRuntime.disassemble(result.targetMethod()));
+    val result = compilerInstance.getCompiler.compileMethod(riMethod, graph)
+    //println(riRuntime.disassemble(result.targetMethod()))
 
     // Install method!
     HotSpotTargetMethod.installMethod(compilerInstance, riMethod.asInstanceOf[HotSpotMethodResolved], result.targetMethod())
-    println(m.invoke(null))
+    println(method.invoke(null))
   }
 
-  implicit def toRichNode(node: AstNode) = new {
-    def dataType = typeToExpressionType(node.getLength)
+  def visualize() {
+    GraalOptions.Plot = true
+    val printer = new IdealGraphPrinterObserver("localhost", 4444)
+    printer.printSingleGraph(method.getName, graph)
+  }
 
-    def kind = typeToExpressionType(node.getLength) match {
+
+  private implicit def toRichNode(node: AstNode) = new {
+    def dataType = toDataType(node.getLength)
+
+    def kind = toDataType(node.getLength) match {
       case AllwaysInt => CiKind.Int
       case AllwaysBoolean => CiKind.Boolean
       case AllwaysDouble => CiKind.Double
@@ -49,68 +55,9 @@ final class GraphBuilder(m: Method, maxLocals: Int, maxStackSize: Int) extends N
     def varIndex = node.getLineno
   }
 
-  /*
-     private void insertLoopPhis(LoopBeginNode loopBegin, FrameState newState) {
-         int stackSize = newState.stackSize();
-         for (int i = 0; i < stackSize; i++) {
-             // always insert phis for the stack
-             ValueNode x = newState.stackAt(i);
-             if (x != null) {
-                 newState.setupPhiForStack(loopBegin, i).addInput(x);
-             }
-         }
-         int localsSize = newState.localsSize();
-         for (int i = 0; i < localsSize; i++) {
-             ValueNode x = newState.localAt(i);
-             if (x != null) {
-                 newState.setupPhiForLocal(loopBegin, i).addInput(x);
-             }
-         }
-     }
-
-
-    private void ifNode(ValueNode x, Condition cond, ValueNode y) {
-        assert !x.isDeleted() && !y.isDeleted();
-        double probability = method.branchProbability(bci());
-        if (probability < 0) {
-            if (GraalOptions.TraceProbability) {
-                TTY.println("missing probability in " + method + " at bci " + bci());
-            }
-            probability = 0.5;
-        }
-
-        IfNode ifNode = graph.add(new IfNode(graph.unique(new CompareNode(x, cond, y)), probability));
-        append(ifNode);
-        BlockMap.BranchOverride override = branchOverride.get(bci());
-        FixedNode tsucc;
-        if (override == null || override.taken == false) {
-            tsucc = createTargetAt(stream().readBranchDest(), frameState);
-        } else {
-            tsucc = createTarget(override.block, frameState);
-        }
-        ifNode.setBlockSuccessor(0, tsucc);
-        FixedNode fsucc;
-        if (override == null || override.taken == true) {
-            fsucc = createTargetAt(stream().nextBCI(), frameState);
-        } else {
-            fsucc = createTarget(override.block, frameState);
-        }
-        ifNode.setBlockSuccessor(1, fsucc);
-    }
-        private static LoopBeginNode loopBegin(Block block) {
-        EndNode endNode = (EndNode) block.firstInstruction.next();
-        LoopBeginNode loopBegin = (LoopBeginNode) endNode.merge();
-        return loopBegin;
-    }
-  */
-
   private def appendConstant(constant: CiConstant): ConstantNode = graph.unique(new ConstantNode(constant))
 
   private def append(v: ValueNode) = v
-
-  private def storeLocal(kind: CiKind, index: Int) {
-    frameState.storeLocal(index, frameState.pop(kind))
-  }
 
   def visit(node: AstNode): Boolean =
     node match {
@@ -132,13 +79,11 @@ final class GraphBuilder(m: Method, maxLocals: Int, maxStackSize: Int) extends N
       case assignment: Assignment =>
         val name = assignment.getLeft.asInstanceOf[Name]
         assignment.getRight.visit(this)
-        storeLocal(name.kind, name.varIndex)
+        frameState.storeLocal(name.varIndex, frameState.pop(name.kind))
         false
       case functionCall: FunctionCall => sys.error("not implemented")
       case _: EmptyExpression => false //nothing
       case infixExpression: InfixExpression =>
-        infixExpression.getLeft.visit(this)
-        infixExpression.getRight.visit(this)
         def genConvert(opcode: Int, from: CiKind, to: CiKind) {
           val tt = to.stackKind()
           frameState.push(tt, append(graph.unique(new ConvertNode(opcode, frameState.pop(from.stackKind()), tt))))
@@ -158,28 +103,33 @@ final class GraphBuilder(m: Method, maxLocals: Int, maxStackSize: Int) extends N
             case FDIV | DDIV => new FloatDivNode(result, x, y, isStrictFP)
             case IREM | LREM => new IntegerRemNode(result, x, y)
             case FREM | DREM => new FloatRemNode(result, x, y, isStrictFP)
-            case _ => sys.error("wow")
+            case _ => sys.error("unknown opcode " + opcode)
           }
           val result1 = append(graph.unique(v))
           frameState.push(result, result1)
         }
-        def genIfSame(kind: CiKind, cond: Condition) {
+        def genIfSame(kind: CiKind, condition: Condition) {
           val y = frameState.pop(kind)
           val x = frameState.pop(kind)
           require(!x.isDeleted && !y.isDeleted)
-          frameState.ipush(append(MaterializeNode.create(graph.unique(new CompareNode(x, cond, y)), graph)))
+          frameState.ipush(append(MaterializeNode.create(graph.unique(new CompareNode(x, condition, y)), graph)))
         }
-        val kind = (infixExpression.getLeft.dataType, infixExpression.getRight.dataType) match {
+        (infixExpression.getLeft.dataType, infixExpression.getRight.dataType) match {
           case (AllwaysInt, AllwaysDouble) =>
+            infixExpression.getLeft.visit(this)
             genConvert(I2D, CiKind.Int, CiKind.Double)
-            CiKind.Double
+            infixExpression.getRight.visit(this)
           case (AllwaysDouble, AllwaysInt) =>
+            infixExpression.getLeft.visit(this)
+            infixExpression.getRight.visit(this)
             genConvert(I2D, CiKind.Int, CiKind.Double)
-            CiKind.Double
-          case (AllwaysInt, AllwaysInt) => CiKind.Int
+          case (AllwaysInt, AllwaysInt) | (AllwaysDouble, AllwaysDouble) =>
+            infixExpression.getLeft.visit(this)
+            infixExpression.getRight.visit(this)
         }
+        val kind = infixExpression.kind
         infixExpression.getOperator match {
-          case Token.OR | Token.AND =>
+          case Token.OR | Token.AND => sys.error("not implemented")
           case Token.EQ => genIfSame(kind, Condition.EQ)
           case Token.NE => genIfSame(kind, Condition.NE)
           case Token.LT => genIfSame(kind, Condition.LT)
@@ -205,13 +155,13 @@ final class GraphBuilder(m: Method, maxLocals: Int, maxStackSize: Int) extends N
       case variableInitializer: VariableInitializer =>
         val name = variableInitializer.getTarget.asInstanceOf[Name]
         variableInitializer.getInitializer.visit(this)
-        storeLocal(variableInitializer.getInitializer.kind, name.varIndex)
+        frameState.storeLocal(name.varIndex, frameState.pop(variableInitializer.getInitializer.kind))
         false
       case whileLoop: WhileLoop => sys.error("not implemented")
       case expressionStatement: ExpressionStatement =>
         expressionStatement.getExpression.visit(this)
         if (expressionStatement.getNext == null) {
-          //last expression ist return value
+          //last expression is return value
           val returnNode = graph.add(new ReturnNode(frameState.pop(expressionStatement.getExpression.kind)))
           graph.setReturn(returnNode)
           graph.start().setNext(returnNode)
@@ -229,10 +179,4 @@ final class GraphBuilder(m: Method, maxLocals: Int, maxStackSize: Int) extends N
         graph.start().setNext(returnNode)
         false
     }
-
-  def visualize() {
-    GraalOptions.Plot = true
-    val printer = new IdealGraphPrinterObserver("localhost", 4444)
-    printer.printSingleGraph("test", graph)
-  }
 }

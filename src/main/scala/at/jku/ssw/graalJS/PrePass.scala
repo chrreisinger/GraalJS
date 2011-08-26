@@ -26,6 +26,7 @@ final case class ConditionalJumpNode(var offset: Int, trueJump: Boolean = false)
 final class PrePass extends NodeVisitor {
   var maxLocals = 0
   var maxOperandStackSize = 0
+
   private val linearASTBuffer = new collection.mutable.ArrayBuffer[AstNode]
   lazy val linerAST = linearASTBuffer.result()
 
@@ -36,8 +37,7 @@ final class PrePass extends NodeVisitor {
 
     def calcOperandStackSize(expression: AstNode): Int =
       expression match {
-        case name: Name => 1
-        case _: NumberLiteral | _: StringLiteral => 1
+        case _: NumberLiteral | _: StringLiteral | _: Name => 1
         case functionCall: FunctionCall => functionCall.getArguments.asScala.map(calcOperandStackSize).max
         case assignment: Assignment => math.max(calcOperandStackSize(assignment.getLeft), calcOperandStackSize(assignment.getRight))
         case infixExpression: InfixExpression =>
@@ -51,14 +51,13 @@ final class PrePass extends NodeVisitor {
       }
   }
 
-  def setVarIndex(name: Name) {
+  private def setVarIndex(name: Name) {
     name.varIndex = variables.getOrElse(name.getIdentifier, sys.error("variable " + name.getIdentifier + " not found line:" + name.getLineno))
   }
 
   def visit(node: AstNode) =
     node match {
-      case _: AstRoot => true
-      case variableDeclaration: VariableDeclaration => true
+      case _: AstRoot | _: VariableDeclaration => true
       case variableInitializer: VariableInitializer =>
         val name = variableInitializer.getTarget.asInstanceOf[Name]
         variables(name.getIdentifier) = maxLocals
@@ -108,10 +107,7 @@ final class PrePass extends NodeVisitor {
         setVarIndex(name)
         linearASTBuffer += node
         false
-      case _: NumberLiteral | _: StringLiteral =>
-        linearASTBuffer += node
-        false
-      case emptyExpression: EmptyExpression =>
+      case _: NumberLiteral | _: StringLiteral | _: EmptyExpression =>
         linearASTBuffer += node
         false
       case scope: Scope => true

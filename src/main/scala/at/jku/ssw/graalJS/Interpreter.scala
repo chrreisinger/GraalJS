@@ -37,27 +37,7 @@ final class Interpreter(nodes: collection.mutable.ArrayBuffer[AstNode], localVar
     element
   }
 
-  import ExpressionType._
-
-  private def calcNewType(oldType: ExpressionType.Value, newValue: AnyRef) =
-    (oldType, newValue) match {
-      case (Undefined, _) => newValue match {
-        case _: JSInteger => AllwaysInt
-        case _: JSBoolean => AllwaysBoolean
-        case _: JSDouble => AllwaysDouble
-        case _: String => AllwaysString
-        case UndefinedValue => Undefined
-      }
-      case (AllwaysInt, _: JSDouble) => AllwaysDouble
-      case (AllwaysDouble, _: JSInteger) => AllwaysDouble
-      case (AllwaysInt, _: JSInteger) => AllwaysInt
-      case (AllwaysBoolean, _: JSBoolean) => AllwaysBoolean
-      case (AllwaysDouble, _: JSDouble) => AllwaysDouble
-      case (AllwaysString, _: String) => AllwaysString
-      case _ => Mixed
-    }
-
-  private def interpretExpression(expression: AstNode): AnyRef = {
+  private def interpretExpression(expression: AstNode) {
     def toNumber(value: Double): java.lang.Number =
       if (value.asInstanceOf[Int].asInstanceOf[Double] == value) new JSInteger(value.asInstanceOf[Int])
       else new JSDouble(value)
@@ -75,14 +55,15 @@ final class Interpreter(nodes: collection.mutable.ArrayBuffer[AstNode], localVar
       case _: EmptyExpression => peek
       case assignment: Assignment =>
         val name = assignment.getLeft.asInstanceOf[Name]
-        require(assignment.getOperator == Token.ASSIGN)
         require(name.varIndex < localVariables.length)
         localVariables(name.varIndex) = pop()
         UndefinedValue
       case infixExpression: InfixExpression =>
         val operator = infixExpression.getOperator
         if (operator == Token.OR || operator == Token.AND) {
-          /*interpretExpression(infixExpression.getLeft)
+          /*
+          TODO
+          interpretExpression(infixExpression.getLeft)
           val left = peek.asInstanceOf[JSBoolean].booleanValue
           if ((!left && operator == Token.OR) || (left && operator == Token.AND)) {
             pop()
@@ -144,9 +125,23 @@ final class Interpreter(nodes: collection.mutable.ArrayBuffer[AstNode], localVar
         }
       case _ => sys.error("unknown node " + expression.getClass)
     }
-    //expression.dataType = calcNewType(expression.dataType, value)
-    expression.dataType = ExpressionType.AllwaysInt
-    value
+    import DataType._
+    expression.dataType = (expression.dataType, value) match {
+      case (Undefined, _) => value match {
+        case _: JSInteger => AllwaysInt
+        case _: JSBoolean => AllwaysBoolean
+        case _: JSDouble => AllwaysDouble
+        case _: String => AllwaysString
+        case UndefinedValue => Undefined
+      }
+      case (AllwaysInt, _: JSDouble) => AllwaysDouble
+      case (AllwaysDouble, _: JSInteger) => AllwaysDouble
+      case (AllwaysInt, _: JSInteger) => AllwaysInt
+      case (AllwaysBoolean, _: JSBoolean) => AllwaysBoolean
+      case (AllwaysDouble, _: JSDouble) => AllwaysDouble
+      case (AllwaysString, _: String) => AllwaysString
+      case _ => Mixed
+    }
   }
 
   @tailrec
@@ -169,7 +164,8 @@ final class Interpreter(nodes: collection.mutable.ArrayBuffer[AstNode], localVar
       case scope: Scope => true
       case node => sys.error("unknown node " + node.getClass)
     }
-    if (next < nodes.size) interpret(next)
+    if (next >= nodes.size) println("interpreter ende")
+    else interpret(next)
   }
 
 }

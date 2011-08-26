@@ -3,7 +3,8 @@ package at.jku.ssw
 import org.mozilla.javascript.ast.AstNode
 
 package object graalJS {
-  object ExpressionType extends Enumeration {
+
+  object DataType extends Enumeration {
     val Undefined = Value(0)
     val AllwaysInt = Value(-1)
     val AllwaysBoolean = Value(-2)
@@ -12,11 +13,11 @@ package object graalJS {
     val Mixed = Value(-5)
   }
 
-  import ExpressionType._
+  import DataType._
 
   case object UndefinedValue
 
-  def typeToExpressionType(_type: Int): ExpressionType.Value =
+  def toDataType(_type: Int): DataType.Value =
     if (_type >= 0) Undefined
     else _type match {
       case -1 => AllwaysInt
@@ -27,9 +28,9 @@ package object graalJS {
     }
 
   implicit def toRichNode(node: AstNode) = new {
-    def dataType = typeToExpressionType(node.getLength)
+    def dataType = toDataType(node.getLength)
 
-    def dataType_=(_dataType: ExpressionType.Value) {
+    def dataType_=(_dataType: DataType.Value) {
       node.setLength(_dataType.id)
     }
 
