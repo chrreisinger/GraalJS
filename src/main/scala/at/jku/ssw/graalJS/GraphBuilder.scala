@@ -79,7 +79,7 @@ final class GraphBuilder(method: Method, maxLocals: Int, maxStackSize: Int) exte
       case assignment: Assignment =>
         val name = assignment.getLeft.asInstanceOf[Name]
         assignment.getRight.visit(this)
-        frameState.storeLocal(name.varIndex, frameState.pop(name.kind))
+        frameState.storeLocal(name.varIndex, frameState.pop(assignment.getRight.kind))
         false
       case functionCall: FunctionCall => sys.error("not implemented")
       case _: EmptyExpression => false //nothing
@@ -157,17 +157,29 @@ final class GraphBuilder(method: Method, maxLocals: Int, maxStackSize: Int) exte
         variableInitializer.getInitializer.visit(this)
         frameState.storeLocal(name.varIndex, frameState.pop(variableInitializer.getInitializer.kind))
         false
-      case whileLoop: WhileLoop => sys.error("not implemented")
+      case whileLoop: WhileLoop =>
+        whileLoop.getCondition.visit(this)
+        val probability = 0.5
+        val y = appendConstant(CiConstant.INT_1)
+        val x = frameState.ipop()
+        val ifNode = graph.add(new IfNode(graph.unique(new CompareNode(x, Condition.EQ, y)), probability))
+        val mergeNode = new MergeNode
+        append(ifNode)
+        ifNode.setFalseSuccessor(mergeNode)
+        whileLoop.getBody.visit(this)
+        //ifNode.setTrueSuccessor(graph.getNode(graph.getNodeCount - 1).asInstanceOf[FixedNode])
+        false
       case expressionStatement: ExpressionStatement =>
         expressionStatement.getExpression.visit(this)
-        if (expressionStatement.getNext == null) {
-          //last expression is return value
-          val returnNode = graph.add(new ReturnNode(frameState.pop(expressionStatement.getExpression.kind)))
-          graph.setReturn(returnNode)
-          graph.start().setNext(returnNode)
-        } else {
-          frameState.pop(expressionStatement.getExpression.kind)
-        }
+        if (!expressionStatement.getExpression.isInstanceOf[Assignment])
+          if (expressionStatement.getNext == null) {
+            //last expression is return value
+            val returnNode = graph.add(new ReturnNode(frameState.pop(expressionStatement.getExpression.kind)))
+            graph.setReturn(returnNode)
+            graph.start().setNext(returnNode)
+          } else {
+            frameState.pop(expressionStatement.getExpression.kind)
+          }
         false
       case returnStatement: ReturnStatement =>
         val returnNode =
@@ -178,5 +190,6 @@ final class GraphBuilder(method: Method, maxLocals: Int, maxStackSize: Int) exte
         graph.setReturn(returnNode)
         graph.start().setNext(returnNode)
         false
+      case scope: Scope => true
     }
 }

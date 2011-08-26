@@ -1,7 +1,6 @@
 var x = 1;   // var declaration
 var y = 100;
 
-x + y + x
 //x + y; // simple binary operations
 
 //x = "asdf"; // string literals
@@ -23,13 +22,13 @@ i = 20 + 0
 
 println("start");
 */
-/*
+
 while(x < y) { // while loop; binary comparison operations
    x = x + 1; // variable assignment
    //if (x == 500) println("500")
    //else if (x == 1000) println("1000")
 }
-*/
+x + y + x
 /*
 i = 20 + 0
 println("ende");

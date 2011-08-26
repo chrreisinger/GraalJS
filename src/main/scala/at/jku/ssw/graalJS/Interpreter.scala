@@ -157,7 +157,7 @@ final class Interpreter(nodes: collection.mutable.ArrayBuffer[AstNode], localVar
       case ConditionalJumpNode(offset, trueJump) =>
         val result = pop().asInstanceOf[JSBoolean].booleanValue
         if ((trueJump && result) || (!trueJump && !result)) next += offset
-      case node@(_: InfixExpression | _: NumberLiteral | _: Name | _: StringLiteral) => interpretExpression(node)
+      case node@(_: InfixExpression | _: NumberLiteral | _: Name | _: StringLiteral | _: FunctionCall) => interpretExpression(node)
       case emptyExpression: EmptyExpression => clearStack()
       case expressionStatement: ExpressionStatement => clearStack()
       case returnStatement: ReturnStatement => println("return value:" + pop())

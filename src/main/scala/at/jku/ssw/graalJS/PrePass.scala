@@ -3,7 +3,7 @@ package at.jku.ssw.graalJS
 import org.mozilla.javascript.ast._
 import scala.collection.JavaConverters._
 
-final case class GotoNode(offset: Int) extends AstNode {
+final case class GotoNode(var offset: Int) extends AstNode {
   override def toString = "" + offset
 
   def toSource(depth: Int) = sys.error("impossible")
@@ -72,12 +72,27 @@ final class PrePass extends NodeVisitor {
         maxLocals += 1
         linearASTBuffer += node
         false
+      case ifStatement: IfStatement =>
+        ifStatement.getCondition.visit(this)
+        val jump = new ConditionalJumpNode(-1, false)
+        linearASTBuffer += jump
+        val size = linearASTBuffer.size
+        ifStatement.getThenPart.visit(this)
+        jump.offset = linearASTBuffer.size - size + 1
+        if (ifStatement.getElsePart != null) {
+          val gotoNode = new GotoNode(-1)
+          val pos = linearASTBuffer.size
+          linearASTBuffer += gotoNode
+          ifStatement.getElsePart.visit(this)
+          gotoNode.offset = linearASTBuffer.size - pos - 1
+        }
+        false
       case whileLoop: WhileLoop =>
         val start = linearASTBuffer.size
         whileLoop.getCondition.visit(this)
         val jump = new ConditionalJumpNode(-1, false)
         linearASTBuffer += jump
-        val size = linearASTBuffer.result().size
+        val size = linearASTBuffer.size
         whileLoop.getBody.visit(this)
         jump.offset = linearASTBuffer.size - size + 1
         linearASTBuffer += new GotoNode(start - linearASTBuffer.size - 1)
@@ -95,6 +110,11 @@ final class PrePass extends NodeVisitor {
       case assignment: Assignment =>
         setVarIndex(assignment.getLeft.asInstanceOf[Name])
         assignment.getRight.visit(this)
+        linearASTBuffer += node
+        false
+      case functionCall: FunctionCall =>
+        calcMaxOperandStackSize(functionCall)
+        functionCall.getArguments.asScala.foreach(_.visit(this))
         linearASTBuffer += node
         false
       case infixExpression: InfixExpression =>
