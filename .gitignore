@@ -6,10 +6,6 @@ project/boot/
 target
 
 # Eclipse
-.classpath
-.launch
-.metadata
-.project
 .scala_dependencies
 .settings
 
