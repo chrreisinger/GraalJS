@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<classpath>
+	<classpathentry kind="src" output="target/scala-2.9.0.1/classes" path="src/main/scala"/>
+	<classpathentry kind="src" output="target/scala-2.9.0.1/classes" path="src/main/resources"/>
+	<classpathentry kind="src" output="target/scala-2.9.0.1/test-classes" path="src/test/scala"/>
+	<classpathentry kind="src" output="target/scala-2.9.0.1/test-classes" path="src/test/resources"/>
+	<classpathentry kind="lib" path="C:/Users/christian/.ivy2/cache/org.mozilla/rhino/jars/rhino-1.7R3.jar"/>
+	<classpathentry kind="con" path="org.scala-ide.sdt.launching.SCALA_CONTAINER"/>
+	<classpathentry kind="con" path="org.eclipse.jdt.launching.JRE_CONTAINER/org.eclipse.jdt.internal.debug.ui.launcher.StandardVMType/JavaSE-1.6"/>
+	<classpathentry combineaccessrules="false" kind="src" path="/com.oracle.max.cri"/>
+	<classpathentry combineaccessrules="false" kind="src" path="/com.oracle.max.graal.compiler"/>
+	<classpathentry combineaccessrules="false" kind="src" path="/com.oracle.max.graal.graph"/>
+	<classpathentry combineaccessrules="false" kind="src" path="/com.oracle.max.graal.nodes"/>
+	<classpathentry combineaccessrules="false" kind="src" path="/com.oracle.max.graal.runtime"/>
+	<classpathentry kind="output" path="target/scala-2.9.0.1/classes"/>
+</classpath>
