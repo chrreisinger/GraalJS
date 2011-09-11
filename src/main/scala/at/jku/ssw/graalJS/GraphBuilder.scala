@@ -26,6 +26,7 @@ final class GraphBuilder(method: Method, maxLocals: Int, maxStackSize: Int) exte
   private val frameState = new FrameStateBuilder(riMethod, maxLocals, maxStackSize, graph)
 
   def run() {
+    GraalOptions.Extend = true
     // Compile and print disassembly.
     val result = compilerInstance.getCompiler.compileMethod(riMethod, graph)
     //println(riRuntime.disassemble(result.targetMethod()))
@@ -57,11 +58,26 @@ final class GraphBuilder(method: Method, maxLocals: Int, maxStackSize: Int) exte
 
   private def appendConstant(constant: CiConstant): ConstantNode = graph.unique(new ConstantNode(constant))
 
+  var lastNode: FixedWithNextNode = _
+
+  private def append(v: FixedNode) {
+    lastNode.setNext(v)
+    lastNode = null
+  }
+
+  private def append(v: FixedWithNextNode) {
+    lastNode.setNext(v)
+    lastNode = v
+  }
+
   private def append(v: ValueNode) = v
 
   def visit(node: AstNode): Boolean =
     node match {
-      case _: AstRoot => true
+      case _: AstRoot =>
+        lastNode = graph.add(new AnchorNode)
+        graph.start().setNext(lastNode)
+        true
       case name: Name =>
         frameState.push(name.kind, frameState.loadLocal(name.varIndex))
         false
@@ -93,7 +109,7 @@ final class GraphBuilder(method: Method, maxLocals: Int, maxStackSize: Int) exte
           val x = frameState.pop(result)
           val isStrictFP = false
           val v = opcode match {
-            case IADD | LADD => new IntegerAddNode(result, x, y)
+            case IADD | LADD => new SafeAddNode(x, y)
             case FADD | DADD => new FloatAddNode(result, x, y, isStrictFP)
             case ISUB | LSUB => new IntegerSubNode(result, x, y)
             case FSUB | DSUB => new FloatSubNode(result, x, y, isStrictFP)
@@ -105,8 +121,7 @@ final class GraphBuilder(method: Method, maxLocals: Int, maxStackSize: Int) exte
             case FREM | DREM => new FloatRemNode(result, x, y, isStrictFP)
             case _ => sys.error("unknown opcode " + opcode)
           }
-          val result1 = append(graph.unique(v))
-          frameState.push(result, result1)
+          frameState.push(result, append(graph.unique(v)))
         }
         def genIfSame(kind: CiKind, condition: Condition) {
           val y = frameState.pop(kind)
@@ -157,17 +172,65 @@ final class GraphBuilder(method: Method, maxLocals: Int, maxStackSize: Int) exte
         variableInitializer.getInitializer.visit(this)
         frameState.storeLocal(name.varIndex, frameState.pop(variableInitializer.getInitializer.kind))
         false
+      case ifStmt: IfStatement =>
+        ifStmt.getCondition.visit(this)
+        val probability = 0.5
+        val y = appendConstant(CiConstant.INT_1)
+        val x = frameState.ipop()
+        val ifNode = graph.add(new IfNode(graph.unique(new CompareNode(x, Condition.EQ, y)), probability))
+        append(ifNode)
+        val ifFrameState = frameState.duplicate(0) //erste instruktion nach dem then zweig
+        val trueAnchor = graph.add(new AnchorNode)
+        ifNode.setTrueSuccessor(trueAnchor)
+        val falseAnchor = graph.add(new AnchorNode)
+        ifNode.setFalseSuccessor(falseAnchor)
+        lastNode = trueAnchor
+        ifStmt.getThenPart.visit(this)
+        val trueEnd = graph.add(new EndNode)
+        val trueEndState = frameState.create(0) //n�chstes statement nach if statement
+        append(trueEnd)
+        lastNode = falseAnchor
+        frameState.initializeFrom(ifFrameState)
+        ifStmt.getElsePart.visit(this)
+        val falseEnd = graph.add(new EndNode)
+        append(falseEnd)
+        val mergeNode = graph.add(new MergeNode)
+        mergeNode.addEnd(trueEnd)
+        trueEndState.merge(mergeNode, frameState)
+        mergeNode.addEnd(falseEnd)
+        mergeNode.setStateAfter(trueEndState)
+        frameState.initializeFrom(trueEndState)
+        lastNode = mergeNode
+        false
       case whileLoop: WhileLoop =>
+        val loopBegin = graph.add(new LoopBeginNode)
+        val endNode = graph.add(new EndNode)
+        append(endNode)
+        loopBegin.addEnd(endNode)
+        val foo = frameState.create(0) //vor der schleife, anfang der condition
+        foo.insertLoopPhis(loopBegin)
+        frameState.initializeFrom(foo)
+        lastNode = loopBegin
+        loopBegin.setStateAfter(foo)
         whileLoop.getCondition.visit(this)
         val probability = 0.5
         val y = appendConstant(CiConstant.INT_1)
         val x = frameState.ipop()
         val ifNode = graph.add(new IfNode(graph.unique(new CompareNode(x, Condition.EQ, y)), probability))
-        val mergeNode = new MergeNode
         append(ifNode)
-        ifNode.setFalseSuccessor(mergeNode)
+        val trueAnchor = graph.add(new AnchorNode)
+        ifNode.setTrueSuccessor(trueAnchor)
+        val falseAnchor = graph.add(new AnchorNode)
+        ifNode.setFalseSuccessor(falseAnchor)
+        val loopExitState = frameState.duplicate(0) //nach der schleifen
+        lastNode = trueAnchor
         whileLoop.getBody.visit(this)
-        //ifNode.setTrueSuccessor(graph.getNode(graph.getNodeCount - 1).asInstanceOf[FixedNode])
+        val loopEndNode = graph.add(new LoopEndNode)
+        foo.merge(loopBegin, frameState)
+        append(loopEndNode)
+        loopEndNode.setLoopBegin(loopBegin)
+        lastNode = falseAnchor
+        frameState.initializeFrom(loopExitState)
         false
       case expressionStatement: ExpressionStatement =>
         expressionStatement.getExpression.visit(this)
@@ -176,7 +239,7 @@ final class GraphBuilder(method: Method, maxLocals: Int, maxStackSize: Int) exte
             //last expression is return value
             val returnNode = graph.add(new ReturnNode(frameState.pop(expressionStatement.getExpression.kind)))
             graph.setReturn(returnNode)
-            graph.start().setNext(returnNode)
+            append(returnNode)
           } else {
             frameState.pop(expressionStatement.getExpression.kind)
           }
@@ -188,7 +251,7 @@ final class GraphBuilder(method: Method, maxLocals: Int, maxStackSize: Int) exte
             graph.add(new ReturnNode(frameState.pop(returnStatement.getReturnValue.kind)))
           } else graph.add(new ReturnNode(null))
         graph.setReturn(returnNode)
-        graph.start().setNext(returnNode)
+        append(returnNode)
         false
       case scope: Scope => true
     }
