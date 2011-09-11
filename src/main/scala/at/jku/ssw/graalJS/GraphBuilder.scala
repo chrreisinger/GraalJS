@@ -13,7 +13,7 @@ import com.oracle.max.graal.compiler.debug.IdealGraphPrinterObserver
 import com.oracle.max.graal.runtime.{HotSpotMethodResolved, HotSpotTargetMethod, CompilerImpl}
 import com.oracle.max.graal.compiler.GraalOptions
 
-final class GraphBuilder(method: Method, maxLocals: Int, maxStackSize: Int) extends NodeVisitor {
+final class GraphBuilder(nodes: collection.mutable.ArrayBuffer[AstNode], method: Method, maxLocals: Int, maxStackSize: Int) extends NodeVisitor {
 
   // Obtain RiMethod and RiRuntime instances.
   private val compilerInstance = CompilerImpl.getInstance()
@@ -26,7 +26,8 @@ final class GraphBuilder(method: Method, maxLocals: Int, maxStackSize: Int) exte
   private val frameState = new FrameStateBuilder(riMethod, maxLocals, maxStackSize, graph)
 
   def run() {
-    GraalOptions.Extend = true
+    //GraalOptions.Extend = true //endlos schleifen
+    riMethod.compilerStorage().put("AST", nodes) //save the linear ast, so that the interpreter san reuse it
     // Compile and print disassembly.
     val result = compilerInstance.getCompiler.compileMethod(riMethod, graph)
     //println(riRuntime.disassemble(result.targetMethod()))

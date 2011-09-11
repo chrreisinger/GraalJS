@@ -25,6 +25,7 @@ package at.jku.ssw.graalJS
 import java.lang.reflect.Modifier
 
 import com.sun.cri.ri._
+import org.mozilla.javascript.ast.AstNode
 
 
 class DeoptHandler {
@@ -80,6 +81,12 @@ class DeoptHandler {
       p += 1
     }
     System.out.println()
+    val localVariables = new Array[AnyRef](numLocals)
+    val operandStack = new Array[AnyRef](numStack)
+    System.arraycopy(values, argCount, localVariables, 0, numLocals)
+    System.arraycopy(values, argCount + numLocals, operandStack, 0, numStack)
+    val interpreter = new Interpreter(method.compilerStorage().get("AST").asInstanceOf[collection.mutable.ArrayBuffer[AstNode]], localVariables, operandStack)
+    interpreter.interpret(bci)
     42
   }
 

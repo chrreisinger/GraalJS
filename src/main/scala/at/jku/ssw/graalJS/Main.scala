@@ -25,7 +25,7 @@ object Main {
     val interpreter = new Interpreter(prePass.linerAST, new Array[AnyRef](prePass.maxLocals), new Array[AnyRef](prePass.maxOperandStackSize))
     interpreter.interpret()
 
-    val graphBuilder = new GraphBuilder(Class.forName("at.jku.ssw.graalJS.Main").getMethod("mockMethod"), prePass.maxLocals, prePass.maxOperandStackSize)
+    val graphBuilder = new GraphBuilder(prePass.linerAST, Class.forName("at.jku.ssw.graalJS.Main").getMethod("mockMethod"), prePass.maxLocals, prePass.maxOperandStackSize)
     ast.visit(graphBuilder)
     graphBuilder.visualize()
     graphBuilder.run()
