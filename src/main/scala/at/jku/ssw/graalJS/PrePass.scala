@@ -78,13 +78,16 @@ final class PrePass extends NodeVisitor {
         linearASTBuffer += jump
         val size = linearASTBuffer.size
         ifStatement.getThenPart.visit(this)
-        jump.offset = linearASTBuffer.size - size + 1
         if (ifStatement.getElsePart != null) {
+          jump.offset = linearASTBuffer.size - size + 1
           val gotoNode = new GotoNode(-1)
           val pos = linearASTBuffer.size
           linearASTBuffer += gotoNode
           ifStatement.getElsePart.visit(this)
           gotoNode.offset = linearASTBuffer.size - pos - 1
+        }
+        else {
+          jump.offset = linearASTBuffer.size - size
         }
         false
       case whileLoop: WhileLoop =>
