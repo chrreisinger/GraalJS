@@ -129,20 +129,22 @@ final class GraphBuilder(method: Method, maxLocals: Int, maxStackSize: Int) exte
           require(!x.isDeleted && !y.isDeleted)
           frameState.ipush(append(MaterializeNode.create(graph.unique(new CompareNode(x, condition, y)), graph)))
         }
-        (infixExpression.getLeft.dataType, infixExpression.getRight.dataType) match {
+        val kind = (infixExpression.getLeft.dataType, infixExpression.getRight.dataType) match {
           case (AllwaysInt, AllwaysDouble) =>
             infixExpression.getLeft.visit(this)
             genConvert(I2D, CiKind.Int, CiKind.Double)
             infixExpression.getRight.visit(this)
+            infixExpression.getRight.kind
           case (AllwaysDouble, AllwaysInt) =>
             infixExpression.getLeft.visit(this)
             infixExpression.getRight.visit(this)
             genConvert(I2D, CiKind.Int, CiKind.Double)
+            infixExpression.getLeft.kind
           case (AllwaysInt, AllwaysInt) | (AllwaysDouble, AllwaysDouble) =>
             infixExpression.getLeft.visit(this)
             infixExpression.getRight.visit(this)
+            infixExpression.getLeft.kind
         }
-        val kind = infixExpression.kind
         infixExpression.getOperator match {
           case Token.OR | Token.AND => sys.error("not implemented")
           case Token.EQ => genIfSame(kind, Condition.EQ)
