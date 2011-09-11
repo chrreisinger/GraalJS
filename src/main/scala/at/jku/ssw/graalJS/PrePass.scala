@@ -37,7 +37,7 @@ final class PrePass extends NodeVisitor {
 
     def calcOperandStackSize(expression: AstNode): Int =
       expression match {
-        case _: NumberLiteral | _: StringLiteral | _: Name => 1
+        case _: NumberLiteral | _: StringLiteral | _: Name => 2
         case functionCall: FunctionCall => functionCall.getArguments.asScala.map(calcOperandStackSize).max
         case assignment: Assignment => math.max(calcOperandStackSize(assignment.getLeft), calcOperandStackSize(assignment.getRight))
         case infixExpression: InfixExpression =>
@@ -69,7 +69,7 @@ final class PrePass extends NodeVisitor {
           linearASTBuffer += null
         }
         calcMaxOperandStackSize(variableInitializer.getTarget)
-        maxLocals += 1
+        maxLocals += 2
         linearASTBuffer += node
         false
       case ifStatement: IfStatement =>
