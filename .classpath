@@ -12,5 +12,6 @@
 	<classpathentry combineaccessrules="false" kind="src" path="/com.oracle.max.graal.graph"/>
 	<classpathentry combineaccessrules="false" kind="src" path="/com.oracle.max.graal.nodes"/>
 	<classpathentry combineaccessrules="false" kind="src" path="/com.oracle.max.graal.runtime"/>
+	<classpathentry combineaccessrules="false" kind="src" path="/com.oracle.max.graal.extensions"/>
 	<classpathentry kind="output" path="target/scala-2.9.0.1/classes"/>
 </classpath>
