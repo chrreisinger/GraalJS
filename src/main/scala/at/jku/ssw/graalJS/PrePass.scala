@@ -55,6 +55,14 @@ final class PrePass extends NodeVisitor {
     name.varIndex = variables.getOrElse(name.getIdentifier, sys.error("variable " + name.getIdentifier + " not found line:" + name.getLineno))
   }
 
+  private def addNode(node: AstNode, index: Int = -1) {
+    if (node != null) {
+      if (index == -1) node.astIndex = linearASTBuffer.size
+      else node.setPosition(index)
+      linearASTBuffer += node
+    }
+  }
+
   def visit(node: AstNode) =
     node match {
       case _: AstRoot | _: VariableDeclaration => true
@@ -65,73 +73,83 @@ final class PrePass extends NodeVisitor {
         if (variableInitializer.getInitializer != null) {
           calcMaxOperandStackSize(variableInitializer.getInitializer)
           variableInitializer.getInitializer.visit(this)
+          addNode(node, variableInitializer.getInitializer.astIndex)
         } else {
-          linearASTBuffer += null
+          addNode(null)
+          addNode(node)
+          variableInitializer.astIndex -= 1
         }
         calcMaxOperandStackSize(variableInitializer.getTarget)
         maxLocals += 2
-        linearASTBuffer += node
         false
       case ifStatement: IfStatement =>
         ifStatement.getCondition.visit(this)
         val jump = new ConditionalJumpNode(-1, false)
-        linearASTBuffer += jump
+        addNode(jump)
         val size = linearASTBuffer.size
         ifStatement.getThenPart.visit(this)
         if (ifStatement.getElsePart != null) {
           jump.offset = linearASTBuffer.size - size + 1
           val gotoNode = new GotoNode(-1)
           val pos = linearASTBuffer.size
-          linearASTBuffer += gotoNode
+          addNode(gotoNode)
           ifStatement.getElsePart.visit(this)
           gotoNode.offset = linearASTBuffer.size - pos - 1
         }
         else {
           jump.offset = linearASTBuffer.size - size
         }
+        ifStatement.astIndex = ifStatement.getCondition.astIndex
         false
       case whileLoop: WhileLoop =>
         val start = linearASTBuffer.size
         whileLoop.getCondition.visit(this)
         val jump = new ConditionalJumpNode(-1, false)
-        linearASTBuffer += jump
+        addNode(jump)
         val size = linearASTBuffer.size
         whileLoop.getBody.visit(this)
         jump.offset = linearASTBuffer.size - size + 1
-        linearASTBuffer += new GotoNode(start - linearASTBuffer.size - 1)
+        addNode(new GotoNode(start - linearASTBuffer.size - 1))
+        whileLoop.astIndex = whileLoop.getCondition.astIndex
         false
       case returnStatement: ReturnStatement =>
-        if (returnStatement.getReturnValue == null) linearASTBuffer += null
-        else returnStatement.getReturnValue.visit(this)
-        linearASTBuffer += returnStatement
+        if (returnStatement.getReturnValue == null) {
+          addNode(null)
+          addNode(returnStatement)
+          returnStatement.astIndex -= 1
+        }
+        else {
+          returnStatement.getReturnValue.visit(this)
+          addNode(returnStatement, returnStatement.getReturnValue.astIndex)
+        }
         false
       case expressionStatement: ExpressionStatement =>
         calcMaxOperandStackSize(expressionStatement.getExpression)
         expressionStatement.getExpression.visit(this)
-        linearASTBuffer += node
+        addNode(node, expressionStatement.getExpression.astIndex)
         false
       case assignment: Assignment =>
         setVarIndex(assignment.getLeft.asInstanceOf[Name])
         assignment.getRight.visit(this)
-        linearASTBuffer += node
+        addNode(node, assignment.getRight.astIndex)
         false
       case functionCall: FunctionCall =>
         calcMaxOperandStackSize(functionCall)
         functionCall.getArguments.asScala.foreach(_.visit(this))
-        linearASTBuffer += node
+        addNode(node, functionCall.getArguments.asScala.headOption.map(_.astIndex).getOrElse(-1))
         false
       case infixExpression: InfixExpression =>
         calcMaxOperandStackSize(infixExpression)
         infixExpression.getLeft.visit(this)
         infixExpression.getRight.visit(this)
-        linearASTBuffer += node
+        addNode(node, infixExpression.getLeft.astIndex)
         false
       case name: Name =>
         setVarIndex(name)
-        linearASTBuffer += node
+        addNode(node)
         false
       case _: NumberLiteral | _: StringLiteral | _: EmptyExpression =>
-        linearASTBuffer += node
+        addNode(node)
         false
       case scope: Scope => true
       case _ => sys.error("unknown node " + node.getClass)

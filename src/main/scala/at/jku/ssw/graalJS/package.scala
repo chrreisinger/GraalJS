@@ -39,5 +39,11 @@ package object graalJS {
     }
 
     def varIndex = node.getLineno
+
+    def astIndex_=(astIndex: Int) {
+      node.setPosition(astIndex)
+    }
+
+    def astIndex = node.getPosition
   }
 }

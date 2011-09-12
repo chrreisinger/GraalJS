@@ -55,6 +55,11 @@ final class GraphBuilder(nodes: collection.mutable.ArrayBuffer[AstNode], method:
     }
 
     def varIndex = node.getLineno
+
+    def astIndex: Int = {
+      require(node.getPosition <= nodes.size)
+      node.getPosition
+    }
   }
 
   private def appendConstant(constant: CiConstant): ConstantNode = graph.unique(new ConstantNode(constant))
@@ -182,7 +187,7 @@ final class GraphBuilder(nodes: collection.mutable.ArrayBuffer[AstNode], method:
         val x = frameState.ipop()
         val ifNode = graph.add(new IfNode(graph.unique(new CompareNode(x, Condition.EQ, y)), probability))
         append(ifNode)
-        val ifFrameState = frameState.duplicate(0) //erste instruktion nach dem then zweig
+        val ifFrameState = frameState.duplicate(if (ifStmt.getElsePart != null) ifStmt.getElsePart.astIndex else ifStmt.getNext.asInstanceOf[AstNode].astIndex) //erste instruktion nach dem then zweig
         val trueAnchor = graph.add(new AnchorNode)
         ifNode.setTrueSuccessor(trueAnchor)
         val falseAnchor = graph.add(new AnchorNode)
@@ -190,7 +195,7 @@ final class GraphBuilder(nodes: collection.mutable.ArrayBuffer[AstNode], method:
         lastNode = trueAnchor
         ifStmt.getThenPart.visit(this)
         val trueEnd = graph.add(new EndNode)
-        val trueEndState = frameState.create(0) //n�chstes statement nach if statement
+        val trueEndState = frameState.create(ifStmt.getNext.asInstanceOf[AstNode].astIndex) //nächstes statement nach if statement
         append(trueEnd)
         lastNode = falseAnchor
         frameState.initializeFrom(ifFrameState)
@@ -210,7 +215,7 @@ final class GraphBuilder(nodes: collection.mutable.ArrayBuffer[AstNode], method:
         val endNode = graph.add(new EndNode)
         append(endNode)
         loopBegin.addEnd(endNode)
-        val foo = frameState.create(0) //vor der schleife, anfang der condition
+        val foo = frameState.create(whileLoop.getCondition.astIndex) //vor der schleife, anfang der condition
         foo.insertLoopPhis(loopBegin)
         frameState.initializeFrom(foo)
         lastNode = loopBegin
@@ -225,7 +230,7 @@ final class GraphBuilder(nodes: collection.mutable.ArrayBuffer[AstNode], method:
         ifNode.setTrueSuccessor(trueAnchor)
         val falseAnchor = graph.add(new AnchorNode)
         ifNode.setFalseSuccessor(falseAnchor)
-        val loopExitState = frameState.duplicate(0) //nach der schleifen
+        val loopExitState = frameState.duplicate(whileLoop.getNext.asInstanceOf[AstNode].astIndex) //nach der schleifen
         lastNode = trueAnchor
         whileLoop.getBody.visit(this)
         val loopEndNode = graph.add(new LoopEndNode)
