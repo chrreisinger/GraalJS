@@ -28,7 +28,7 @@ final class GraphBuilder(nodes: collection.mutable.ArrayBuffer[AstNode], method:
   private val frameState = new FrameStateBuilder(riMethod, maxLocals, maxStackSize, graph)
 
   def run() {
-    //GraalOptions.Extend = true //endlos schleifen
+    GraalOptions.Extend = true
     riMethod.compilerStorage().put("AST", nodes) //save the linear ast, so that the interpreter san reuse it
     // Compile and print disassembly.
     val result = compilerInstance.getCompiler.compileMethod(riMethod, graph)
@@ -290,7 +290,7 @@ final class GraphBuilder(nodes: collection.mutable.ArrayBuffer[AstNode], method:
         ifNode.setFalseSuccessor(falseAnchor)
         val loopExitState = frameState.duplicate(whileLoop.getNext.asInstanceOf[AstNode].astIndex) //nach der schleifen
         lastNode = trueAnchor
-        if (!branchTaken(whileLoop.getBody)) whileLoop.getBody.visit(this)
+        if (branchTaken(whileLoop.getBody)) whileLoop.getBody.visit(this)
         else append(graph.add(new DeoptimizeNode(DeoptimizeNode.DeoptAction.None)))
         val loopEndNode = graph.add(new LoopEndNode)
         foo.merge(loopBegin, frameState)

@@ -47,7 +47,8 @@ public class FrameModifierImpl implements FrameModifier {
             // put the current state (local vars, expressions, etc.) into an array
             CiVirtualObjectFactory factory = new CiVirtualObjectFactory(runtime);
             ArrayList<CiValue> originalValues = new ArrayList<CiValue>();
-            for (int i = 0; i < frame.values.length; i += frame.values[i].kind.sizeInSlots()) {
+            for (int i = 0; i < frame.values.length; i += 2) {
+                assert !frame.values[i].isIllegal();
                 originalValues.add(factory.proxy(frame.values[i]));
             }
             CiValue boxedValues = factory.arrayProxy(runtime.getType(Object[].class), originalValues.toArray(new CiValue[originalValues.size()]));
