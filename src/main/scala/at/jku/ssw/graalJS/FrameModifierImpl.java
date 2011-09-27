@@ -40,7 +40,11 @@ public class FrameModifierImpl implements FrameModifier {
             RiType type = runtime.getType(DeoptHandler.class);
             CiKind returnKind = frame.method.signature().returnKind();
             String methodName = "handle_" + returnKind;
-            String methodSignature = "(Lcom/sun/cri/ri/RiMethod;I[Ljava/lang/Object;III)" + returnKind.signatureChar();
+            String returnType = null;
+            //bug in Graal, type of Long is L, but the correct one is "J"
+            if (returnKind == CiKind.Long) returnType = "J";
+            else returnKind.signatureChar();
+            String methodSignature = "(Lcom/sun/cri/ri/RiMethod;I[Ljava/lang/Object;III)" + returnType;
             RiMethod handlerMethod = type.getMethod(methodName, methodSignature);
             assert handlerMethod != null : methodName + " not found...";
 
@@ -50,6 +54,7 @@ public class FrameModifierImpl implements FrameModifier {
             for (int i = 0; i < frame.values.length; i += 2) {
                 assert !frame.values[i].isIllegal();
                 originalValues.add(factory.proxy(frame.values[i]));
+                originalValues.add(CiConstant.NULL_OBJECT);
             }
             CiValue boxedValues = factory.arrayProxy(runtime.getType(Object[].class), originalValues.toArray(new CiValue[originalValues.size()]));
 

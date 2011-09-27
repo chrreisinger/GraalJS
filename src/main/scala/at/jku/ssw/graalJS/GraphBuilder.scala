@@ -7,9 +7,7 @@ import org.mozilla.javascript.ast._
 import com.sun.cri.ci.{CiConstant, CiKind}
 import com.sun.cri.bytecode.Bytecodes._
 import com.oracle.max.graal.compiler.value.FrameStateBuilder
-import com.oracle.max.graal.graph.Node
 import com.oracle.max.graal.nodes._
-import com.oracle.max.graal.nodes.java.ExceptionObjectNode
 import com.oracle.max.graal.nodes.calc._
 import com.oracle.max.graal.compiler.debug.IdealGraphPrinterObserver
 import com.oracle.max.graal.runtime.{HotSpotMethodResolved, HotSpotTargetMethod, CompilerImpl}
@@ -30,6 +28,8 @@ final class GraphBuilder(nodes: collection.mutable.ArrayBuffer[AstNode], method:
   def run() {
     GraalOptions.Extend = true
     riMethod.compilerStorage().put("AST", nodes) //save the linear ast, so that the interpreter san reuse it
+    riMethod.compilerStorage().put("MAX_STACK", maxStackSize.asInstanceOf[AnyRef])
+    riMethod.compilerStorage().put("MAX_LOCALS", maxLocals.asInstanceOf[AnyRef])
     // Compile and print disassembly.
     val result = compilerInstance.getCompiler.compileMethod(riMethod, graph)
     //println(riRuntime.disassemble(result.targetMethod()))
@@ -87,48 +87,9 @@ final class GraphBuilder(nodes: collection.mutable.ArrayBuffer[AstNode], method:
   }
 
   private def append(v: FixedNode): ValueNode = {
-    if (v.isInstanceOf[DeoptimizeNode] && lastNode.predecessor() != null) {
-      var cur: Node = lastNode
-      var prev = cur
-      val mybreaks = new scala.util.control.Breaks
-      import mybreaks.{break, breakable}
-      breakable {
-        while (cur != cur.graph().start() && !(cur.isInstanceOf[ControlSplitNode])) {
-          require(cur.predecessor() != null)
-          prev = cur
-          cur = cur.predecessor()
-          if (cur.predecessor() == null || cur.isInstanceOf[ExceptionObjectNode]) {
-            break()
-          }
-        }
-      }
-
-      if (cur.isInstanceOf[IfNode]) {
-        val ifNode = cur.asInstanceOf[IfNode]
-        if (ifNode.falseSuccessor() == prev) {
-          val successor = ifNode.trueSuccessor()
-          ifNode.setTrueSuccessor(null)
-          val condition = ifNode.compare()
-          val fixedGuard = graph.add(new FixedGuardNode(condition))
-          fixedGuard.setNext(successor)
-          ifNode.replaceAndDelete(fixedGuard)
-          lastNode = null
-          return v
-        }
-      } else if (prev ne cur) {
-        prev.replaceAtPredecessors(v)
-        lastNode = null
-        return v
-      }
-    }
     lastNode.setNext(v)
     lastNode = null
     v
-  }
-
-  private def append(v: FixedWithNextNode) {
-    lastNode.setNext(v)
-    lastNode = v
   }
 
   private def append(v: ValueNode) = v
@@ -254,16 +215,23 @@ final class GraphBuilder(nodes: collection.mutable.ArrayBuffer[AstNode], method:
         append(trueEnd)
         lastNode = falseAnchor
         frameState.initializeFrom(ifFrameState)
-        if (ifStmt.getElsePart != null) {
-          if (branchTaken(ifStmt.getElsePart)) ifStmt.getElsePart.visit(this)
-          else append(graph.add(new DeoptimizeNode(DeoptimizeNode.DeoptAction.None)))
-        }
-        val falseEnd = graph.add(new EndNode)
-        append(falseEnd)
+        val falseEnd =
+          if (ifStmt.getElsePart != null) {
+            if (branchTaken(ifStmt.getElsePart)) {
+              ifStmt.getElsePart.visit(this)
+              append(graph.add(new EndNode)).asInstanceOf[EndNode]
+            }
+            else {
+              append(graph.add(new DeoptimizeNode(DeoptimizeNode.DeoptAction.None)))
+              null
+            }
+          } else null
         val mergeNode = graph.add(new MergeNode)
         mergeNode.addEnd(trueEnd)
-        trueEndState.merge(mergeNode, frameState)
-        mergeNode.addEnd(falseEnd)
+        if (falseEnd != null) {
+          trueEndState.merge(mergeNode, frameState)
+          mergeNode.addEnd(falseEnd)
+        }
         mergeNode.setStateAfter(trueEndState)
         frameState.initializeFrom(trueEndState)
         lastNode = mergeNode
@@ -290,12 +258,28 @@ final class GraphBuilder(nodes: collection.mutable.ArrayBuffer[AstNode], method:
         ifNode.setFalseSuccessor(falseAnchor)
         val loopExitState = frameState.duplicate(whileLoop.getNext.asInstanceOf[AstNode].astIndex) //nach der schleifen
         lastNode = trueAnchor
-        if (branchTaken(whileLoop.getBody)) whileLoop.getBody.visit(this)
-        else append(graph.add(new DeoptimizeNode(DeoptimizeNode.DeoptAction.None)))
-        val loopEndNode = graph.add(new LoopEndNode)
-        foo.merge(loopBegin, frameState)
-        append(loopEndNode)
-        loopEndNode.setLoopBegin(loopBegin)
+        val loopEndNode =
+          if (branchTaken(whileLoop.getBody)) {
+            whileLoop.getBody.visit(this)
+            graph.add(new LoopEndNode)
+          }
+          else {
+            append(graph.add(new DeoptimizeNode(DeoptimizeNode.DeoptAction.None)))
+            null
+          }
+        if (loopEndNode != null) {
+          foo.merge(loopBegin, frameState)
+          append(loopEndNode)
+          loopEndNode.setLoopBegin(loopBegin)
+        } else {
+          val tmp = loopBegin.next()
+          val mergeNode = graph.add(new MergeNode)
+          mergeNode.setStateAfter(loopBegin.stateAfter())
+          loopBegin.setNext(null)
+          mergeNode.setNext(tmp)
+          mergeNode.addEnd(loopBegin.endAt(0))
+          loopBegin.replaceAndDelete(mergeNode)
+        }
         lastNode = falseAnchor
         frameState.initializeFrom(loopExitState)
         false

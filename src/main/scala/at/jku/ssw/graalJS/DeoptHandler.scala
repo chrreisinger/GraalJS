@@ -38,11 +38,17 @@ class DeoptHandler {
   }
 
   /**
-    * Deoptimization handler method for methods with an int return parameter.gd
+    * Deoptimization handler method for methods with an int return parameter.
     */
   def handle_int(method: RiMethod, bci: Int, values: Array[AnyRef], numLocals: Int, numStack: Int, numLocks: Int): Int = {
+    handle(method, bci, values, numLocals, numStack, numLocks).asInstanceOf[Int]
+  }
+
+  /**
+    * Deoptimization handler method for methods with an long return parameter.
+    */
+  def handle_long(method: RiMethod, bci: Int, values: Array[AnyRef], numLocals: Int, numStack: Int, numLocks: Int): Long = {
     handle(method, bci, values, numLocals, numStack, numLocks)
-    42 //the answer to all questions
   }
 
   /**
@@ -56,38 +62,17 @@ class DeoptHandler {
   /**
     * Deoptimization handler method: prints the current state of the method execution.
     */
-  def handle(method: RiMethod, bci: Int, values: Array[AnyRef], numLocals: Int, numStack: Int, numLocks: Int): Int = {
-    System.out.print("Deoptimization: " + method.name() + "@" + bci)
-    var p = 0
-    System.out.print("\nArguments: ")
+  def handle(method: RiMethod, bci: Int, values: Array[AnyRef], numLocals: Int, numStack: Int, numLocks: Int): Long = {
+    //println("Deoptimization: " + method.name() + "@" + bci)
     val argCount = method.signature().argumentCount(!Modifier.isStatic(method.accessFlags()))
-    for (i <- 0 to argCount) {
-      System.out.printf("%s ", values(p))
-      p += 1
-    }
-    System.out.print("\nLocals: ")
-    for (i <- argCount to numLocals) {
-      System.out.printf("%s ", values(p))
-      p += 1
-    }
-    System.out.print("\nExpression stack: ")
-    for (i <- 0 to numStack) {
-      System.out.printf("%s ", values(p))
-      p += 1
-    }
-    System.out.print("\nLocks: ")
-    for (i <- 0 to numLocks) {
-      System.out.printf("%s ", values(p))
-      p += 1
-    }
-    System.out.println()
-    val localVariables = new Array[AnyRef](numLocals)
-    val operandStack = new Array[AnyRef](numStack)
+    //println(numLocals + " " + numStack + " " + values.length)
+    //println(values.mkString(","))
+    val localVariables = new Array[AnyRef](method.compilerStorage().get("MAX_LOCALS").asInstanceOf[Int])
+    val operandStack = new Array[AnyRef](method.compilerStorage().get("MAX_STACK").asInstanceOf[Int])
     System.arraycopy(values, argCount, localVariables, 0, numLocals)
     System.arraycopy(values, argCount + numLocals, operandStack, 0, numStack)
     val interpreter = new Interpreter(method.compilerStorage().get("AST").asInstanceOf[collection.mutable.ArrayBuffer[AstNode]], localVariables, operandStack)
     interpreter.interpret(bci)
-    42
   }
 
 }

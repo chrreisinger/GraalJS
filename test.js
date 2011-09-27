@@ -1,35 +1,13 @@
 var x = 1;   // var declaration
-var y = 100;
+var y = 100000;
+var z = 0;
 
-//x + y; // simple binary operations
+if (x<y) x = x;
+else x = x;
 
-//x = "asdf"; // string literals
-//x = 1; // int literals
-
-/*
-var i = 0
-for (i = 0; i < 4; i = i + 1) {
-  println("for")
+while(z < y) { // while loop; binary comparison operations
+   z = z + 1;
+   x = x + 100000; // variable assignment
 }
 
-i = 4 + 0
-do {
- i = i - 1
- println("while")
-} while(i >= 0)
-
-i = 20 + 0
-
-println("start");
-*/
-
-while(x < y) { // while loop; binary comparison operations
-   x = x + 1; // variable assignment
-   //if (x == 500) println("500")
-   //else if (x == 1000) println("1000")
-}
 x + y + x
-/*
-i = 20 + 0
-println("ende");
-*/

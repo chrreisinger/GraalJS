@@ -8,7 +8,7 @@ final class Interpreter(nodes: collection.mutable.ArrayBuffer[AstNode], localVar
 
   type JSDouble = java.lang.Double
   type JSBoolean = java.lang.Boolean
-  type JSInteger = java.lang.Integer
+  type JSInteger = java.lang.Long
 
   private var top = -1
 
@@ -39,7 +39,7 @@ final class Interpreter(nodes: collection.mutable.ArrayBuffer[AstNode], localVar
 
   private def interpretExpression(expression: AstNode) {
     def toNumber(value: Double): java.lang.Number =
-      if (value.asInstanceOf[Int].asInstanceOf[Double] == value) new JSInteger(value.asInstanceOf[Int])
+      if (value.asInstanceOf[Long].asInstanceOf[Double] == value) new JSInteger(value.asInstanceOf[Long])
       else new JSDouble(value)
 
     val value = expression match {
@@ -99,12 +99,12 @@ final class Interpreter(nodes: collection.mutable.ArrayBuffer[AstNode], localVar
               case Token.SUB => toNumber(leftInt.doubleValue - rightInt.doubleValue)
               case Token.MUL => toNumber(leftInt.doubleValue * rightInt.doubleValue)
               case Token.DIV => toNumber(leftInt.doubleValue / rightInt.doubleValue)
-              case Token.EQ => new JSBoolean(leftInt.intValue == rightInt.intValue)
-              case Token.NE => new JSBoolean(leftInt.intValue != rightInt.intValue)
-              case Token.LT => new JSBoolean(leftInt.intValue < rightInt.intValue)
-              case Token.LE => new JSBoolean(leftInt.intValue <= rightInt.intValue)
-              case Token.GT => new JSBoolean(leftInt.intValue > rightInt.intValue)
-              case Token.GE => new JSBoolean(leftInt.intValue >= rightInt.intValue)
+              case Token.EQ => new JSBoolean(leftInt.longValue == rightInt.longValue)
+              case Token.NE => new JSBoolean(leftInt.longValue != rightInt.longValue)
+              case Token.LT => new JSBoolean(leftInt.longValue < rightInt.longValue)
+              case Token.LE => new JSBoolean(leftInt.longValue <= rightInt.longValue)
+              case Token.GT => new JSBoolean(leftInt.longValue > rightInt.longValue)
+              case Token.GE => new JSBoolean(leftInt.longValue >= rightInt.longValue)
               case _ => sys.error("unknown operator " + Token.typeToName(operator))
             }
             case (leftNumber: java.lang.Number, rightNumber: java.lang.Number) => operator match {
@@ -145,7 +145,7 @@ final class Interpreter(nodes: collection.mutable.ArrayBuffer[AstNode], localVar
   }
 
   @tailrec
-  def interpret(index: Int = 0) {
+  def interpret(index: Int = 0): Long = {
     var next = index + 1
     nodes(index) match {
       case null => push(UndefinedValue)
@@ -158,13 +158,13 @@ final class Interpreter(nodes: collection.mutable.ArrayBuffer[AstNode], localVar
         val result = pop().asInstanceOf[JSBoolean].booleanValue
         if ((trueJump && result) || (!trueJump && !result)) next += offset
       case node@(_: InfixExpression | _: NumberLiteral | _: Name | _: StringLiteral | _: FunctionCall) => interpretExpression(node)
-      case emptyExpression: EmptyExpression => clearStack()
-      case expressionStatement: ExpressionStatement => clearStack()
+      case emptyExpression: EmptyExpression => //clearStack()
+      case expressionStatement: ExpressionStatement => //clearStack()
       case returnStatement: ReturnStatement => println("return value:" + pop())
       case scope: Scope => true
       case node => sys.error("unknown node " + node.getClass)
     }
-    if (next >= nodes.size) println("interpreter ende")
+    if (next >= nodes.size) pop().asInstanceOf[JSInteger].longValue() //println("interpreter ende")
     else interpret(next)
   }
 

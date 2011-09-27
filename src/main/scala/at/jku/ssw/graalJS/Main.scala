@@ -6,7 +6,7 @@ import org.mozilla.javascript.tools.ToolErrorReporter
 import org.mozilla.javascript.ast.AstRoot
 
 object Main {
-  def mockMethod = 41
+  def mockMethod = 41L
 
   private def parse(source: Either[String, Reader], sourceName: String = "unnamed script", lineno: Int = 1, compilationErrorReporter: ErrorReporter = new ToolErrorReporter(true)): AstRoot = {
     val parser = new Parser(new CompilerEnvirons, compilationErrorReporter)
