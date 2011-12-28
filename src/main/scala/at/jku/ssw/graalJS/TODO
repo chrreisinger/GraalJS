@@ -1,0 +1,30 @@
+graphbuilder else zweig kann null sein (done)
+DeoptimizeNode Node erzeugen wenn zweig nie ausgeführt wurde (done)
+magic number 5 durch ast array index ersetzen; bci is ast index (done)
+method interpret (Object[] values, int numLocals, int numStack) (done)
+interpreter für if statements fixen (done)
+FrameModifierImpl kopieren (done)
+Meta-INF services (done)
+clean up (done)
+einchecken (done)
+if/while statements (done)
+TODOs
+eclipse ide files einchecken (done)
+mail schicken mit ide instruktionen (done)
+
+
+expression berechnungen bei Integers mit double mochen  ADD, SUB, MUL,DIV (done)
+expression berechnungen mixed mit JSInteger und JSDouble (done)
+bei linearen ast JUMP mit array index bei while (done)
+CONDITIONAL JUMP bei if statement statt pop (done)
+
+
+type in expression speichern undefined, allways A | B, mixed (done)
+variablen mit index zugreifen (done)
+expression auf int spezialisieren, z.B vergleiche (done)
+
+variables array mit index (done)
+variablen auflösen in einem pass (done)
+maxLocals (done)
+maxExpressionStackSize (done)
+ast lineraize (done)

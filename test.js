@@ -2,7 +2,7 @@ var x = 1;   // var declaration
 var y = 100000;
 var z = 0;
 
-if (x<y) x = x;
+if (x<y) x = x; //if statement
 else x = x;
 
 while(z < y) { // while loop; binary comparison operations
